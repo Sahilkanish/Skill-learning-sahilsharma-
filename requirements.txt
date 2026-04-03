@@ -1,0 +1,6 @@
+streamlit
+ultralytics
+folium
+streamlit-folium
+pillow
+pandas
