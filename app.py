@@ -12,7 +12,7 @@ st.title("🛣️ Road Damage Detection System")
 
 # 2. Model Load
 model_path = r'C:\Users\sahil\Downloads\archive\data\runs\detect\train7\weights\best.pt'
-model = YOLO(model_path) 
+model = YOLO('best.pt') 
 
 # 3. Session State Initialization (Results ko hold karne ke liye)
 if 'history' not in st.session_state:
