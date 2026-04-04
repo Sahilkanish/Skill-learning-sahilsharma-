@@ -39,7 +39,7 @@ setup_db()
 
 # --- UI Config ---
 st.set_page_config(page_title="AI Road Inspector", layout="centered")
-st.title("🚧 Road Health Monitoring System")
+st.title("🛣️AI ROAD DAMAGE DETECTOR🛣️")
 
 if 'detection_done' not in st.session_state:
     st.session_state.detection_done = False
@@ -48,11 +48,13 @@ if 'detection_done' not in st.session_state:
 st.sidebar.header("Control Panel")
 
 # 1. Image Upload
-uploaded_file = st.sidebar.file_uploader("📤 Step 1: Upload Image", type=['jpg', 'jpeg', 'png'])
+
+uploaded_file = st.sidebar.file_uploader("📷 Step 1: Upload Image📷", type=['jpg', 'jpeg', 'png'])
 
 # 2. Location Settings
+
 st.sidebar.markdown("---")
-st.sidebar.subheader("📍 Step 2: Location")
+st.sidebar.subheader("📍 Step 2: Location 📍")
 if st.sidebar.button("Get My Live Location"):
     loc = streamlit_js_eval(data_of='getCurrentPosition', key='get_loc')
     if loc:
@@ -63,17 +65,18 @@ u_lat = st.sidebar.number_input("Latitude", value=st.session_state.get('auto_lat
 u_lon = st.sidebar.number_input("Longitude", value=st.session_state.get('auto_lon', 77.2090), format="%.6f")
 
 # 3. Model Selection
+
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 🤖 Step 3: Model")
+st.sidebar.markdown(" Ⓜ️ Step 3: Model Ⓜ️")
 st.sidebar.info("Model: Standard Pothole Detector")
 
 # 4. Database Section
 st.sidebar.markdown("---")
-st.sidebar.subheader("🗄️ Step 4: Database")
+st.sidebar.subheader("📊 Step 4: Database 📊")
 report_filter = st.sidebar.selectbox("History Filter", ["All Reports", "Potholes Only", "Cracks Only"])
 show_db = st.sidebar.button("📊 View/Refresh Database")
 
-@st.cache_resource
+# --- MODEL PATH SECTION ---
 def load_yolo():
     path = 'best.pt'
     return YOLO(path) if os.path.exists(path) else None
@@ -115,8 +118,9 @@ if uploaded_file:
         if st.button("💾 Save Report to Database", use_container_width=True):
             save_data(st.session_state.last_lat, st.session_state.last_lon, p, c)
 
-        # --- ANALYSIS HEADINGS ---
-        st.markdown("### 📈 Detection Analysis")
+        # --- GRAPH SECTION ---
+        
+        st.markdown(" 📈 Detection Analysis")
         c1, c2 = st.columns(2)
         
         with c1:
@@ -131,8 +135,8 @@ if uploaded_file:
                 "Value": [f"{st.session_state.last_lat:.4f}", f"{st.session_state.last_lon:.4f}", p, c]
             }))
 
-        # --- MAP HEADING ---
-        st.markdown("### 🗺️ Damage Location Map")
+        # --- MAP & LOCATION SECTION  ---
+        st.markdown(" 🗺️ Damage Location Map")
         m = folium.Map(location=[st.session_state.last_lat, st.session_state.last_lon], zoom_start=16)
         folium.Marker(
             [st.session_state.last_lat, st.session_state.last_lon], 
@@ -141,7 +145,7 @@ if uploaded_file:
         ).add_to(m)
         st_folium(m, width=700, height=300)
 
-# --- SHOW DATABASE LOGIC ---
+# --- SHOW DATABASE ---
 if show_db:
     st.markdown("---")
     st.subheader("📊 Saved Reports History")
