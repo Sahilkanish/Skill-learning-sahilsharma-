@@ -89,7 +89,7 @@ if uploaded_file:
     
     if st.button("🚀 Run AI Detection", type="primary", use_container_width=True):
         if yolo_model:
-            results = yolo_model.predict(img, conf=0.35, iou=0.4)
+            results = yolo_model.predict(img, conf=0.15, iou=0.45)
             st.session_state.res_img = results[0].plot()
             
             labels = results[0].boxes.cls.tolist()
