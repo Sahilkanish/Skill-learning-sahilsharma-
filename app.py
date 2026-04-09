@@ -43,7 +43,7 @@ def login_user(email, password):
 
 setup_db()
 
-# --- 2. AUTH SYSTEM ---
+# --- 2. LOGIN PAGE ---
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 
@@ -60,16 +60,16 @@ if not st.session_state.logged_in:
                 st.session_state.logged_in = True
                 st.session_state.user_email = lemail
                 st.rerun()
-            else: st.error("❌ Invalid Credentials")
+            else: st.error("❌ Invalid Account!Please Sign Up")
     with tab2:
         semail = st.text_input("Email", key="signup_email")
         spass = st.text_input("Password", type="password", key="signup_pass")
         if st.button("Create Account", use_container_width=True):
-            if add_user(semail, spass): st.success("✅ Account Created! Please Login.")
+            if add_user(semail, spass): st.success("✅ Account Created sucessfully! Please Login.")
             else: st.error("❌ User already exists.")
     st.stop()
 
-# --- 3. MAIN DASHBOARD CONFIG ---
+# --- 3. MAIN DASHBOARD ---
 st.set_page_config(page_title="AI Road Damage Detector", layout="centered")
 st.title("🛣️ AI ROAD DAMAGE DETECTOR")
 
@@ -105,7 +105,7 @@ report_filter = st.sidebar.selectbox("Filter Data:", ["All Reports", "Potholes O
 if st.sidebar.button("📊 Show Database Content"):
     st.session_state.show_db_view = True
 
-# --- MODEL LOADING ---
+# --- MODEL ---
 @st.cache_resource
 def load_yolo():
     # Check if file exists in standard path or current folder
@@ -146,7 +146,7 @@ if uploaded_file:
             conn.commit(); conn.close()
             st.success("✅ Report Saved!")
 
-        # --- GRAPH & ANALYSIS (FIXED) ---
+        # --- GRAPH & ANALYSIS  ---
         st.markdown("### 📈 Detection Analysis")
         col_g1, col_g2 = st.columns(2) # Naming matching fixed
         with col_g1:
@@ -167,7 +167,7 @@ if uploaded_file:
         folium.Marker([st.session_state.det_lat, st.session_state.det_lon], icon=folium.Icon(color='red')).add_to(m)
         st_folium(m, width=700, height=300)
 
-# --- DATABASE VIEW ---
+# --- DATABASE VIEWER ---
 if st.session_state.show_db_view:
     st.markdown("---")
     conn = sqlite3.connect(DB_NAME)
