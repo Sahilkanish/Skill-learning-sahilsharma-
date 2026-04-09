@@ -1,5 +1,6 @@
 streamlit
 ultralytics
+--extra-index-url https://download.pytorch.org/whl/cpu
 opencv-python-headless
 pillow
 pandas
