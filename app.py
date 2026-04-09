@@ -111,7 +111,7 @@ def load_yolo():
     # Check if file exists in standard path or current folder
     path = 'best.pt' 
     if not os.path.exists(path):
-        path = 'C:/Users/sahil/Downloads/archive/data/runs/detect/train7/weights/best.pt'
+        path = 'best.pt'
     return YOLO(path) if os.path.exists(path) else None
 
 yolo_model = load_yolo()
