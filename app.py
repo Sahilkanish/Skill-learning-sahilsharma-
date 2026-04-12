@@ -14,8 +14,8 @@ from email.message import EmailMessage
 
 # --- CONFIGURATION ---
 DB_NAME = 'road_reports_v4.db'
-SENDER_EMAIL = "ss6929043@gmail.com"  # Aapki Gmail ID
-SENDER_PASS = st.secrets["GMAIL_PASS"] # .streamlit/secrets.toml se aayega
+SENDER_EMAIL = "ss6929043@gmail.com"  
+SENDER_PASS = st.secrets["GMAIL_PASS"] 
 
 # --- 1. DATABASE SETUP ---
 def setup_db():
