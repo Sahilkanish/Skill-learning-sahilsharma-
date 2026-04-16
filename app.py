@@ -1,6 +1,7 @@
 import streamlit as st
 from ultralytics import YOLO
 from PIL import Image
+from PIL.ExifTags import TAGS, GPSTAGS
 import sqlite3
 import pandas as pd
 from datetime import datetime
@@ -12,12 +13,45 @@ import smtplib
 import random
 from email.message import EmailMessage
 
-# --- CONFIGURATION ---
-DB_NAME = 'road_reports_v4.db'
-SENDER_EMAIL = "ss6929043@gmail.com"  
-SENDER_PASS = st.secrets["GMAIL_PASS"] 
+# --- 1. CONFIGURATION ---
+st.set_page_config(page_title="AI Road Damage Detector", layout="wide")
 
-# --- 1. DATABASE SETUP ---
+DB_NAME = 'road_reports_v4.db'
+SENDER_EMAIL = "ss6929043@gmail.com" 
+SENDER_PASS = st.secrets.get("GMAIL_PASS", "") 
+
+# --- NEW: FUNCTION TO GET LOCATION FROM IMAGE METADATA ---
+def get_image_location(image):
+    try:
+        info = image._getexif()
+        if not info:
+            return None
+        
+        geotagging = {}
+        for (tag, value) in info.items():
+            decoded = TAGS.get(tag, tag)
+            if decoded == 'GPSInfo':
+                for (t, v) in value.items():
+                    sub_decoded = GPSTAGS.get(t, t)
+                    geotagging[sub_decoded] = v
+        
+        if 'GPSLatitude' in geotagging and 'GPSLongitude' in geotagging:
+            def convert_to_degrees(value):
+                d = float(value[0])
+                m = float(value[1])
+                s = float(value[2])
+                return d + (m / 60.0) + (s / 3600.0)
+
+            lat = convert_to_degrees(geotagging['GPSLatitude'])
+            lon = convert_to_degrees(geotagging['GPSLongitude'])
+            if geotagging.get('GPSLatitudeRef') == 'S': lat = -lat
+            if geotagging.get('GPSLongitudeRef') == 'W': lon = -lon
+            return lat, lon
+    except Exception:
+        return None
+    return None
+
+# --- DATABASE SETUP ---
 def setup_db():
     conn = sqlite3.connect(DB_NAME)
     curr = conn.cursor()
@@ -65,7 +99,6 @@ if 'reset_mode' not in st.session_state: st.session_state.reset_mode = False
 if 'otp_verified' not in st.session_state: st.session_state.otp_verified = False
 
 if not st.session_state.logged_in:
-    st.set_page_config(page_title="Login - AI Road Detector", layout="wide")
     st.markdown("<h2 style='text-align: center;'>🔐 AI Road Damage Detector</h2>", unsafe_allow_html=True)
 
     if st.session_state.reset_mode:
@@ -82,7 +115,7 @@ if not st.session_state.logged_in:
                         st.session_state.generated_otp = otp
                         st.session_state.target_email = email_to_reset
                         st.success("✅ OTP sent to your Gmail!")
-                    else: st.error("❌ Failed to send email. Check App Password.")
+                    else: st.error("❌ Failed to send email.")
                 else: st.error("❌ Email not found.")
             
             otp_in = st.text_input("Enter 4-Digit OTP")
@@ -129,12 +162,8 @@ if not st.session_state.logged_in:
                     else: st.error("❌ User already exists.")
     st.stop()
 
-# --- 3. MAIN DASHBOARD ---
-st.set_page_config(page_title="AI Road Damage Detector", layout="wide")
-st.title("🛣️ AI ROAD DAMAGE DETECTOR 🛣️")
-
-if 'detection_done' not in st.session_state: st.session_state.detection_done = False
-if 'show_db_view' not in st.session_state: st.session_state.show_db_view = False
+# --- 3. MAIN INTERFACE ---
+st.title("🛣️ AI ROAD DAMAGE DETECTOR")
 
 # Sidebar
 st.sidebar.info(f"👤 User: {st.session_state.user_email}")
@@ -145,7 +174,16 @@ if st.sidebar.button("Logout"):
 st.sidebar.markdown("---")
 uploaded_file = st.sidebar.file_uploader("📷 Step 1: Upload Image", type=['jpg', 'jpeg', 'png'])
 
-# Location
+# AUTO-FILL LOCATION FROM IMAGE
+if uploaded_file and 'last_uploaded' not in st.session_state:
+    img_temp = Image.open(uploaded_file)
+    coords = get_image_location(img_temp)
+    if coords:
+        st.session_state.auto_lat, st.session_state.auto_lon = coords
+        st.sidebar.success("📍 Location extracted from Image!")
+    st.session_state.last_uploaded = uploaded_file.name
+
+# Location Sidebar
 st.sidebar.subheader("📍 Step 2: Location")
 if st.sidebar.button("Get My Live Location"):
     loc = streamlit_js_eval(data_of='getCurrentPosition', key='get_loc')
@@ -155,56 +193,58 @@ if st.sidebar.button("Get My Live Location"):
 u_lat = st.sidebar.number_input("Lat", value=st.session_state.get('auto_lat', 28.6139), format="%.6f")
 u_lon = st.sidebar.number_input("Lon", value=st.session_state.get('auto_lon', 77.2090), format="%.6f")
 
+# Sidebar History Note
+st.sidebar.markdown("---")
+st.sidebar.subheader("📂 Step 3: View History")
+st.sidebar.info("Click on 'Historical Data' tab to see maps and reports.")
+
 # Model Loading
 @st.cache_resource
 def load_yolo():
     return YOLO('best.pt') if os.path.exists('best.pt') else None
 yolo_model = load_yolo()
 
-# Main Detection Logic
-if uploaded_file:
-    # Success message after upload
-    st.success("✅ Image uploaded successfully! Please click the button below to Run Ai Detection.")
-    
-    if st.button("🚀 Run AI Detection 🚀", type="primary", use_container_width=True):
-        if yolo_model:
-            img = Image.open(uploaded_file)
-            results = yolo_model.predict(img, conf=0.10, iou=0.45)
-            st.session_state.res_img = results[0].plot()
-            labels = results[0].boxes.cls.tolist()
-            st.session_state.c_count, st.session_state.p_count = labels.count(0), labels.count(1)
-            st.session_state.det_lat, st.session_state.det_lon = u_lat, u_lon
-            st.session_state.detection_done = True
-        else: st.error("Model file (best.pt) not found!")
+# TABS
+tab_dash, tab_hist = st.tabs(["🖥️ Dashboard", "📂 Historical Data"])
 
-    if st.session_state.detection_done:
+# --- TAB 1: DASHBOARD ---
+with tab_dash:
+    if uploaded_file:
+        st.success("✅ Image uploaded!")
+        if st.button("🚀 Run AI Detection", type="primary", use_container_width=True):
+            if yolo_model:
+                img = Image.open(uploaded_file)
+                results = yolo_model.predict(img, conf=0.15)
+                st.session_state.res_img = results[0].plot()
+                labels = results[0].boxes.cls.tolist()
+                st.session_state.p_count, st.session_state.c_count = labels.count(0), labels.count(1)
+                st.session_state.det_lat, st.session_state.det_lon = u_lat, u_lon
+                st.session_state.detection_done = True
+            else: st.error("Model file (best.pt) not found!")
+
+    if st.session_state.get('detection_done'):
         st.markdown("---")
         cl, cr = st.columns([2, 1])
         p, c = st.session_state.p_count, st.session_state.c_count
         
         with cl:
             st.image(st.session_state.res_img, caption="AI Detection Result", use_container_width=True)
-        
         with cr:
             st.subheader("📋 Detection Results")
+            # Logic for color coding status
+            status_color = "red" if p > 2 else "green"
+            st.markdown(f"<h3 style='color:{status_color};'>Status: {'DANGER' if p > 2 else 'SAFE'}</h3>", unsafe_allow_html=True)
+            
             st.metric("🕳️ Potholes Found", p)
             st.metric("🚧 Cracks Found", c)
-            
-            # Status logic
-            if p > 2: st.error("⚠️ Status: Road Damage")
-            elif p >= 1: st.warning("⚠️ Status: Road Repair Needed")
-            else: st.success("✅ Status: Road is Perfect")
-            
             if st.button("💾 Save Report to Database", use_container_width=True):
                 conn = sqlite3.connect(DB_NAME)
                 now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 conn.execute("INSERT INTO road_logs (timestamp, lat, lon, potholes, cracks) VALUES (?, ?, ?, ?, ?)", 
                              (now, st.session_state.det_lat, st.session_state.det_lon, p, c))
-                conn.commit()
-                conn.close()
+                conn.commit(); conn.close()
                 st.success("✅ Saved!")
 
-        # --- GRAPH & ANALYSIS ---
         st.markdown("### 📈 Detection Analysis")
         col_g1, col_g2 = st.columns(2)
         with col_g1:
@@ -219,31 +259,29 @@ if uploaded_file:
             })
             st.table(summary_df)
 
-        # Map
         st.markdown("### 🗺️ Damage Location Map")
         m = folium.Map(location=[st.session_state.det_lat, st.session_state.det_lon], zoom_start=16)
-        folium.Marker([st.session_state.det_lat, st.session_state.det_lon], 
-                      popup=f"Potholes: {p}, Cracks: {c}", icon=folium.Icon(color='red')).add_to(m)
-        st_folium(m, width=700, height=300)
+        folium.Marker([st.session_state.det_lat, st.session_state.det_lon], popup=f"P: {p}, C: {c}", icon=folium.Icon(color='red')).add_to(m)
+        st_folium(m, width=900, height=400)
 
-# Database Section (Sidebar controls)
-st.sidebar.markdown("---")
-report_type = st.sidebar.selectbox("Select Report:", ["All Reports", "Pothole Reports", "Crack Reports", "Registered Users"])
-if st.sidebar.button("📊 Show Selected Report"):
-    st.session_state.show_db_view = True
-    st.session_state.current_report = report_type
+# --- TAB 2: HISTORICAL DATA ---
+with tab_hist:
+    st.header("📊 History & Map Explorer")
+    h_category = st.selectbox(
+        "Select Category:",
+        ["All Reports", "Pothole Reports", "Crack Reports", "User Login Data"],
+        key="history_box_main"
+    )
 
-if st.session_state.show_db_view:
-    st.markdown("---")
     conn = sqlite3.connect(DB_NAME)
-    if st.session_state.current_report == "Registered Users":
-        df = pd.read_sql_query("SELECT id, email, password FROM users", conn)
-    elif st.session_state.current_report == "Pothole Reports":
-        df = pd.read_sql_query("SELECT * FROM road_logs WHERE potholes > 0", conn)
-    else:
-        df = pd.read_sql_query("SELECT * FROM road_logs", conn)
+    if h_category == "All Reports":
+        df = pd.read_sql_query("SELECT * FROM road_logs ORDER BY timestamp DESC", conn)
+    elif h_category == "Pothole Reports":
+        df = pd.read_sql_query("SELECT * FROM road_logs WHERE potholes > 0 ORDER BY timestamp DESC", conn)
+    elif h_category == "Crack Reports":
+        df = pd.read_sql_query("SELECT * FROM road_logs WHERE cracks > 0 ORDER BY timestamp DESC", conn)
+    elif h_category == "User Login Data":
+        df = pd.read_sql_query("SELECT id, email FROM users", conn)
+    
     st.dataframe(df, use_container_width=True)
     conn.close()
-    if st.button("Close Database"): 
-        st.session_state.show_db_view = False
-        st.rerun()
