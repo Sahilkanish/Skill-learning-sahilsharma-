@@ -20,7 +20,7 @@ DB_NAME = 'road_reports_v4.db'
 SENDER_EMAIL = "ss6929043@gmail.com" 
 SENDER_PASS = st.secrets.get("GMAIL_PASS", "") 
 
-# --- NEW: FUNCTION TO GET LOCATION FROM IMAGE METADATA ---
+# --- FUNCTION TO GET LOCATION FROM IMAGE METADATA ---
 def get_image_location(image):
     try:
         info = image._getexif()
@@ -144,7 +144,7 @@ if not st.session_state.logged_in:
         t1, t2 = st.tabs(["Login", "Sign Up"])
         with t1:
             with st.form("l_form"):
-                le = st.text_input("Email")
+                le = st.text_input("Email", autofocus=True)
                 lp = st.text_input("Password", type="password")
                 if st.form_submit_button("Login", type="primary", use_container_width=True):
                     if login_user(le, lp):
@@ -175,13 +175,12 @@ st.sidebar.markdown("---")
 uploaded_file = st.sidebar.file_uploader("📷 Step 1: Upload Image", type=['jpg', 'jpeg', 'png'])
 
 # AUTO-FILL LOCATION FROM IMAGE
-if uploaded_file and 'last_uploaded' not in st.session_state:
+if uploaded_file:
     img_temp = Image.open(uploaded_file)
     coords = get_image_location(img_temp)
     if coords:
         st.session_state.auto_lat, st.session_state.auto_lon = coords
         st.sidebar.success("📍 Location extracted from Image!")
-    st.session_state.last_uploaded = uploaded_file.name
 
 # Location Sidebar
 st.sidebar.subheader("📍 Step 2: Location")
@@ -192,11 +191,6 @@ if st.sidebar.button("Get My Live Location"):
 
 u_lat = st.sidebar.number_input("Lat", value=st.session_state.get('auto_lat', 28.6139), format="%.6f")
 u_lon = st.sidebar.number_input("Lon", value=st.session_state.get('auto_lon', 77.2090), format="%.6f")
-
-# Sidebar History Note
-st.sidebar.markdown("---")
-st.sidebar.subheader("📂 Step 3: View History")
-st.sidebar.info("Click on 'Historical Data' tab to see maps and reports.")
 
 # Model Loading
 @st.cache_resource
@@ -214,10 +208,25 @@ with tab_dash:
         if st.button("🚀 Run AI Detection", type="primary", use_container_width=True):
             if yolo_model:
                 img = Image.open(uploaded_file)
-                results = yolo_model.predict(img, conf=0.15)
+                # IOU=0.45 set kiya gaya hai overlapping boxes hatane ke liye
+                results = yolo_model.predict(img, conf=0.25, iou=0.45) 
+                
                 st.session_state.res_img = results[0].plot()
                 labels = results[0].boxes.cls.tolist()
-                st.session_state.p_count, st.session_state.c_count = labels.count(0), labels.count(1)
+                class_names = yolo_model.names
+                
+                # Dynamic counting logic to prevent mismatch
+                p_count = 0
+                c_count = 0
+                for label_id in labels:
+                    name = class_names[label_id].lower()
+                    if 'pothole' in name:
+                        p_count += 1
+                    else:
+                        c_count += 1
+                
+                st.session_state.p_count = p_count
+                st.session_state.c_count = c_count
                 st.session_state.det_lat, st.session_state.det_lon = u_lat, u_lon
                 st.session_state.detection_done = True
             else: st.error("Model file (best.pt) not found!")
@@ -231,9 +240,9 @@ with tab_dash:
             st.image(st.session_state.res_img, caption="AI Detection Result", use_container_width=True)
         with cr:
             st.subheader("📋 Detection Results")
-            # Logic for color coding status
-            status_color = "red" if p > 2 else "green"
-            st.markdown(f"<h3 style='color:{status_color};'>Status: {'DANGER' if p > 2 else 'SAFE'}</h3>", unsafe_allow_html=True)
+            status_color = "red" if p > 0 else "green"
+            status_txt = "DANGER (Potholes)" if p > 0 else "SAFE"
+            st.markdown(f"<h3 style='color:{status_color};'>Status: {status_txt}</h3>", unsafe_allow_html=True)
             
             st.metric("🕳️ Potholes Found", p)
             st.metric("🚧 Cracks Found", c)
@@ -267,11 +276,7 @@ with tab_dash:
 # --- TAB 2: HISTORICAL DATA ---
 with tab_hist:
     st.header("📊 History & Map Explorer")
-    h_category = st.selectbox(
-        "Select Category:",
-        ["All Reports", "Pothole Reports", "Crack Reports", "User Login Data"],
-        key="history_box_main"
-    )
+    h_category = st.selectbox("Select Category:", ["All Reports", "Pothole Reports", "Crack Reports", "User Login Data"])
 
     conn = sqlite3.connect(DB_NAME)
     if h_category == "All Reports":
