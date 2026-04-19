@@ -144,7 +144,7 @@ if not st.session_state.logged_in:
         t1, t2 = st.tabs(["Login", "Sign Up"])
         with t1:
             with st.form("l_form"):
-                le = st.text_input("Email")
+                le = st.text_input("Email", autofocus=True)
                 lp = st.text_input("Password", type="password")
                 if st.form_submit_button("Login", type="primary", use_container_width=True):
                     if login_user(le, lp):
@@ -208,14 +208,10 @@ with tab_dash:
         if st.button("🚀 Run AI Detection", type="primary", use_container_width=True):
             if yolo_model:
                 img = Image.open(uploaded_file)
-                # IOU=0.45 set kiya gaya hai overlapping boxes hatane ke liye
                 results = yolo_model.predict(img, conf=0.25, iou=0.45) 
-                
                 st.session_state.res_img = results[0].plot()
                 labels = results[0].boxes.cls.tolist()
                 class_names = yolo_model.names
-                
-                # Dynamic counting logic to prevent mismatch
                 p_count = 0
                 c_count = 0
                 for label_id in labels:
@@ -224,7 +220,6 @@ with tab_dash:
                         p_count += 1
                     else:
                         c_count += 1
-                
                 st.session_state.p_count = p_count
                 st.session_state.c_count = c_count
                 st.session_state.det_lat, st.session_state.det_lon = u_lat, u_lon
@@ -235,7 +230,6 @@ with tab_dash:
         st.markdown("---")
         cl, cr = st.columns([2, 1])
         p, c = st.session_state.p_count, st.session_state.c_count
-        
         with cl:
             st.image(st.session_state.res_img, caption="AI Detection Result", use_container_width=True)
         with cr:
@@ -243,7 +237,6 @@ with tab_dash:
             status_color = "red" if p > 0 else "green"
             status_txt = "DANGER (Potholes)" if p > 0 else "SAFE"
             st.markdown(f"<h3 style='color:{status_color};'>Status: {status_txt}</h3>", unsafe_allow_html=True)
-            
             st.metric("🕳️ Potholes Found", p)
             st.metric("🚧 Cracks Found", c)
             if st.button("💾 Save Report to Database", use_container_width=True):
@@ -279,14 +272,38 @@ with tab_hist:
     h_category = st.selectbox("Select Category:", ["All Reports", "Pothole Reports", "Crack Reports", "User Login Data"])
 
     conn = sqlite3.connect(DB_NAME)
+    
     if h_category == "All Reports":
-        df = pd.read_sql_query("SELECT * FROM road_logs ORDER BY timestamp DESC", conn)
+        # 1. Pothole Section in All Reports
+        st.subheader("🕳️ Pothole Reports")
+        df_p = pd.read_sql_query("SELECT * FROM road_logs WHERE potholes > 0 ORDER BY timestamp DESC", conn)
+        st.dataframe(df_p, use_container_width=True)
+        
+        st.markdown("---") # Divider line
+        
+        # 2. Crack Section in All Reports
+        st.subheader("🚧 Crack Reports")
+        df_c = pd.read_sql_query("SELECT * FROM road_logs WHERE cracks > 0 ORDER BY timestamp DESC", conn)
+        st.dataframe(df_c, use_container_width=True)
+        
+        st.markdown("---") # Divider line
+        
+        # 3. User Info Section in All Reports
+        st.subheader("👤 User Login Information")
+        df_u = pd.read_sql_query("SELECT id, email, password FROM users", conn)
+        st.dataframe(df_u, use_container_width=True)
+
     elif h_category == "Pothole Reports":
         df = pd.read_sql_query("SELECT * FROM road_logs WHERE potholes > 0 ORDER BY timestamp DESC", conn)
+        st.dataframe(df, use_container_width=True)
+
     elif h_category == "Crack Reports":
         df = pd.read_sql_query("SELECT * FROM road_logs WHERE cracks > 0 ORDER BY timestamp DESC", conn)
+        st.dataframe(df, use_container_width=True)
+
     elif h_category == "User Login Data":
-        df = pd.read_sql_query("SELECT id, email FROM users", conn)
+        df = pd.read_sql_query("SELECT id, email, password FROM users", conn)
+        st.dataframe(df, use_container_width=True)
     
-    st.dataframe(df, use_container_width=True)
     conn.close()
+        
