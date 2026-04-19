@@ -150,7 +150,7 @@ if not st.session_state.logged_in:
         t1, t2 = st.tabs(["Login", "Sign Up"])
         with t1:
             with st.form("l_form"):
-                le = st.text_input("Email", autofocus=True)
+                le = st.text_input("Email")
                 lp = st.text_input("Password", type="password")
                 if st.form_submit_button("Login", type="primary", use_container_width=True):
                     if login_user(le, lp):
