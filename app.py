@@ -144,7 +144,7 @@ if not st.session_state.logged_in:
         t1, t2 = st.tabs(["Login", "Sign Up"])
         with t1:
             with st.form("l_form"):
-                le = st.text_input("Email")
+                le = st.text_input("Email",)
                 lp = st.text_input("Password", type="password")
                 if st.form_submit_button("Login", type="primary", use_container_width=True):
                     if login_user(le, lp):
@@ -191,6 +191,11 @@ if st.sidebar.button("Get My Live Location"):
 
 u_lat = st.sidebar.number_input("Lat", value=st.session_state.get('auto_lat', 28.6139), format="%.6f")
 u_lon = st.sidebar.number_input("Lon", value=st.session_state.get('auto_lon', 77.2090), format="%.6f")
+
+# --- STEP 3 SIDEBAR ADDITION ---
+st.sidebar.markdown("---")
+st.sidebar.subheader("📂 Step 3: Check Reports")
+st.sidebar.info("All reports check karne ke liye 'Historical Data' tab par click karein.")
 
 # Model Loading
 @st.cache_resource
@@ -269,26 +274,27 @@ with tab_dash:
 # --- TAB 2: HISTORICAL DATA ---
 with tab_hist:
     st.header("📊 History & Map Explorer")
+    
+    # Instruction message added here
+    st.info("💡 Niche diye gye drop down button se list ka type chose kre")
+    
     h_category = st.selectbox("Select Category:", ["All Reports", "Pothole Reports", "Crack Reports", "User Login Data"])
 
     conn = sqlite3.connect(DB_NAME)
     
     if h_category == "All Reports":
-        # 1. Pothole Section in All Reports
         st.subheader("🕳️ Pothole Reports")
         df_p = pd.read_sql_query("SELECT * FROM road_logs WHERE potholes > 0 ORDER BY timestamp DESC", conn)
         st.dataframe(df_p, use_container_width=True)
         
-        st.markdown("---") # Divider line
+        st.markdown("---")
         
-        # 2. Crack Section in All Reports
         st.subheader("🚧 Crack Reports")
         df_c = pd.read_sql_query("SELECT * FROM road_logs WHERE cracks > 0 ORDER BY timestamp DESC", conn)
         st.dataframe(df_c, use_container_width=True)
         
-        st.markdown("---") # Divider line
+        st.markdown("---")
         
-        # 3. User Info Section in All Reports
         st.subheader("👤 User Login Information")
         df_u = pd.read_sql_query("SELECT id, email, password FROM users", conn)
         st.dataframe(df_u, use_container_width=True)
