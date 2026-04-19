@@ -280,7 +280,7 @@ with tab_hist:
     
     # Dropdown ke upar "Drop" label aur options update kiye hain
     h_category = st.selectbox(
-        "Drop", 
+        "Drop-down", 
         ["All Reports", "Pothole Reports", "Crack Reports", "User Registration"]
     )
 
