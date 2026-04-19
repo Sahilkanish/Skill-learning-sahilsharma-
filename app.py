@@ -20,7 +20,7 @@ DB_NAME = 'road_reports_v4.db'
 SENDER_EMAIL = "ss6929043@gmail.com" 
 SENDER_PASS = st.secrets.get("GMAIL_PASS", "") 
 
-# Folder for saving images
+# Result images ke liye folder setup
 if not os.path.exists("saved_results"):
     os.makedirs("saved_results")
 
@@ -51,7 +51,7 @@ def get_image_location(image):
 def setup_db():
     conn = sqlite3.connect(DB_NAME)
     curr = conn.cursor()
-    # image_path column added here
+    # image_path column ensure karein
     curr.execute('''CREATE TABLE IF NOT EXISTS road_logs 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, lat REAL, lon REAL, 
                   potholes INTEGER, cracks INTEGER, image_path TEXT)''')
@@ -156,7 +156,7 @@ if not st.session_state.logged_in:
 # --- 3. MAIN INTERFACE ---
 st.title("🛣️ AI ROAD DAMAGE DETECTOR")
 
-# Sidebar
+# Sidebar User Info
 st.sidebar.info(f"👤 User: {st.session_state.user_email}")
 if st.sidebar.button("Logout"):
     st.session_state.logged_in = False
@@ -165,6 +165,7 @@ if st.sidebar.button("Logout"):
 st.sidebar.markdown("---")
 uploaded_file = st.sidebar.file_uploader("📷 Step 1: Upload Image", type=['jpg', 'jpeg', 'png'])
 
+# Location Extraction
 if uploaded_file:
     img_temp = Image.open(uploaded_file)
     coords = get_image_location(img_temp)
@@ -181,7 +182,7 @@ if st.sidebar.button("Get My Live Location"):
 u_lat = st.sidebar.number_input("Lat", value=st.session_state.get('auto_lat', 28.6139), format="%.6f")
 u_lon = st.sidebar.number_input("Lon", value=st.session_state.get('auto_lon', 77.2090), format="%.6f")
 
-# STEP 3 SIDEBAR
+# Sidebar Step 3
 st.sidebar.markdown("---")
 st.sidebar.subheader("📂 Step 3: Check Reports")
 st.sidebar.info("All reports check karne ke liye 'Historical Data' tab par click karein.")
@@ -222,16 +223,35 @@ with tab_dash:
             st.metric("🕳️ Potholes Found", p)
             st.metric("🚧 Cracks Found", c)
             if st.button("💾 Save Report to Database", use_container_width=True):
-                # Save processed image to local folder
-                img_filename = f"saved_results/rep_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
-                Image.fromarray(st.session_state.res_img).save(img_filename)
+                # Save processed image to folder
+                img_path = f"saved_results/rep_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+                Image.fromarray(st.session_state.res_img).save(img_path)
 
                 conn = sqlite3.connect(DB_NAME)
                 now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 conn.execute("INSERT INTO road_logs (timestamp, lat, lon, potholes, cracks, image_path) VALUES (?, ?, ?, ?, ?, ?)", 
-                             (now, st.session_state.det_lat, st.session_state.det_lon, p, c, img_filename))
+                             (now, st.session_state.det_lat, st.session_state.det_lon, p, c, img_path))
                 conn.commit(); conn.close()
                 st.success("✅ Saved!")
+
+        st.markdown("### 📈 Detection Analysis")
+        col_g1, col_g2 = st.columns(2)
+        with col_g1:
+            st.write("**Damage Distribution (Graph)**")
+            chart_data = pd.DataFrame({'Count': [p, c]}, index=['Potholes', 'Cracks'])
+            st.bar_chart(chart_data)
+        with col_g2:
+            st.write("**Data Summary (Index)**")
+            summary_df = pd.DataFrame({
+                "Parameter": ["Latitude", "Longitude", "Potholes Found", "Cracks Found"], 
+                "Value": [str(st.session_state.det_lat), str(st.session_state.det_lon), str(p), str(c)]
+            })
+            st.table(summary_df)
+
+        st.markdown("### 🗺️ Damage Location Map")
+        m = folium.Map(location=[st.session_state.det_lat, st.session_state.det_lon], zoom_start=16)
+        folium.Marker([st.session_state.det_lat, st.session_state.det_lon], popup=f"P: {p}, C: {c}", icon=folium.Icon(color='red')).add_to(m)
+        st_folium(m, width=900, height=400)
 
 # --- TAB 2: HISTORICAL DATA ---
 with tab_hist:
@@ -240,20 +260,24 @@ with tab_hist:
     
     h_category = st.selectbox("drop down", ["All Reports", "Pothole Reports", "Crack Reports", "User Login Data"])
     
-    # Image Configuration for Table
-    img_conf = {"image_path": st.column_config.ImageColumn("Preview", width="small")}
-
     conn = sqlite3.connect(DB_NAME)
     
+    def display_with_image(df):
+        # Safety Check: image_path column check karein
+        config = {}
+        if "image_path" in df.columns:
+            config = {"image_path": st.column_config.ImageColumn("Preview", width="small")}
+        st.dataframe(df, column_config=config, use_container_width=True, hide_index=True)
+
     if h_category == "All Reports":
         st.subheader("🕳️ Pothole Reports")
         df_p = pd.read_sql_query("SELECT * FROM road_logs WHERE potholes > 0 ORDER BY timestamp DESC", conn)
-        st.dataframe(df_p, column_config=img_conf, use_container_width=True, hide_index=True)
+        display_with_image(df_p)
         
         st.markdown("---")
         st.subheader("🚧 Crack Reports")
         df_c = pd.read_sql_query("SELECT * FROM road_logs WHERE cracks > 0 ORDER BY timestamp DESC", conn)
-        st.dataframe(df_c, column_config=img_conf, use_container_width=True, hide_index=True)
+        display_with_image(df_c)
         
         st.markdown("---")
         st.subheader("👤 User Login Information")
@@ -262,16 +286,18 @@ with tab_hist:
 
     elif h_category == "Pothole Reports":
         df = pd.read_sql_query("SELECT * FROM road_logs WHERE potholes > 0 ORDER BY timestamp DESC", conn)
-        st.dataframe(df, column_config=img_conf, use_container_width=True, hide_index=True)
+        display_with_image(df)
 
     elif h_category == "Crack Reports":
         df = pd.read_sql_query("SELECT * FROM road_logs WHERE cracks > 0 ORDER BY timestamp DESC", conn)
-        st.dataframe(df, column_config=img_conf, use_container_width=True, hide_index=True)
+        display_with_image(df)
 
     elif h_category == "User Login Data":
         df = pd.read_sql_query("SELECT id, email, password FROM users", conn)
         st.dataframe(df, use_container_width=True, hide_index=True)
     
     conn.close()
+                
+
                 
             
