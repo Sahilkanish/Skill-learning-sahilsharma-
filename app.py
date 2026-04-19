@@ -275,10 +275,14 @@ with tab_dash:
 with tab_hist:
     st.header("📊 History & Map Explorer")
     
-    # Instruction message added here
+    # Blue instruction message
     st.info("💡 Niche diye gye drop down button se list ka type chose kre")
     
-    h_category = st.selectbox("Select Category:", ["All Reports", "Pothole Reports", "Crack Reports", "User Login Data"])
+    # Dropdown ke upar "Drop" label aur options update kiye hain
+    h_category = st.selectbox(
+        "Drop", 
+        ["All Reports", "Pothole Reports", "Crack Reports", "User Registration"]
+    )
 
     conn = sqlite3.connect(DB_NAME)
     
@@ -300,15 +304,19 @@ with tab_hist:
         st.dataframe(df_u, use_container_width=True)
 
     elif h_category == "Pothole Reports":
+        st.subheader("🕳️ Pothole Reports")
         df = pd.read_sql_query("SELECT * FROM road_logs WHERE potholes > 0 ORDER BY timestamp DESC", conn)
         st.dataframe(df, use_container_width=True)
 
     elif h_category == "Crack Reports":
+        st.subheader("🚧 Crack Reports")
         df = pd.read_sql_query("SELECT * FROM road_logs WHERE cracks > 0 ORDER BY timestamp DESC", conn)
         st.dataframe(df, use_container_width=True)
 
-    elif h_category == "User Login Data":
+    elif h_category == "User Registration":
+        st.subheader("👤 User Registration Data")
         df = pd.read_sql_query("SELECT id, email, password FROM users", conn)
         st.dataframe(df, use_container_width=True)
     
     conn.close()
+            
