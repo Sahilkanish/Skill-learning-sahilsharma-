@@ -156,14 +156,24 @@ with st.sidebar:
     st.markdown("### 📍 GPS Control")
     
     # Aapka chahita button - is par click karte hi browser location mangega
+    loc = streamlit_js_eval(
+    js_expressions="""
+    new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+            (pos) => resolve(pos),
+            (err) => resolve(null)
+        );
+    })
+    """,
+    key="live_location"
+)
     if st.button("🌐 Get Live Location"):
-        loc = streamlit_js_eval(data_of='getCurrentPosition', key='get_gps_btn')
-        if loc:
-            st.session_state.auto_lat = loc['coords']['latitude']
-            st.session_state.auto_lon = loc['coords']['longitude']
-            st.success("Location Updated! ✅")
-        else:
-            st.warning("📡 Waiting for GPS signal...")
+     if loc and 'coords' in loc:
+        st.session_state.auto_lat = loc['coords']['latitude']
+        st.session_state.auto_lon = loc['coords']['longitude']
+        st.success("Location Updated! ✅")
+    else:
+        st.warning("📡 Location allow karo aur dubara click karo")
 
     # Ye input boxes hamesha latest value dikhayenge aur Admin ko yahi se data jayega
     u_lat = st.number_input("Lat", value=st.session_state.auto_lat, format="%.6f")
