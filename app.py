@@ -133,11 +133,12 @@ with st.sidebar:
         st.session_state.logged_in = False; st.rerun()
     
     st.markdown("---")
+    
+    # Admin notification logic (isko mat chhedna)
     if is_admin:
         conn = sqlite3.connect(DB_NAME)
         pending_reports = pd.read_sql_query("SELECT * FROM pending_reports", conn)
         conn.close()
-        
         notif_count = len(pending_reports)
         st.markdown(f"### 🔔 Notifications: `{notif_count}`")
         if notif_count > 0:
@@ -151,21 +152,25 @@ with st.sidebar:
     st.markdown("---")
     uploaded_file = st.file_uploader("📷 Step 1: Upload Image", type=['jpg', 'jpeg', 'png'])
     
-    # --- YAHAN FIX HAI: Har click par naya location fetch hoga ---
-    if st.button("📍 Get My Live Location"):
-        # Humne random key di hai taaki browser popup trigger kare
-        loc_key = f"get_loc_{random.randint(0, 1000)}"
-        loc = streamlit_js_eval(data_of='getCurrentPosition', key=loc_key)
-        if loc:
-            st.session_state.auto_lat = loc['coords']['latitude']
-            st.session_state.auto_lon = loc['coords']['longitude']
-            st.success("Location Mil gayi!")
-            st.rerun() # Refresh zaroori hai screen par dikhane ke liye
+    # --- YAHAN HAI LIVE LOCATION FIX ---
+    st.markdown("### 📍 GPS Status")
+    
+    # Ye line har refresh par current position check karegi
+    loc = streamlit_js_eval(data_of='getCurrentPosition', key='get_user_gps')
+    
+    if loc:
+        st.session_state.auto_lat = loc['coords']['latitude']
+        st.session_state.auto_lon = loc['coords']['longitude']
+        st.success("Location Captured! ✅")
+    else:
+        st.warning("Fetching GPS... 📡 (Make sure Location is ON)")
             
+    # Ye fields automatic update ho jayenge jab upar location milegi
     u_lat = st.number_input("Lat", value=st.session_state.auto_lat, format="%.6f")
     u_lon = st.number_input("Lon", value=st.session_state.auto_lon, format="%.6f")
     
     st.markdown("---")
+    
     st.success("✅ **Step 3:** Report check karne ke liye **Historical Data** tab par click karein")
 
 @st.cache_resource
