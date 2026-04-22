@@ -24,11 +24,12 @@ if not os.path.exists("saved_results"):
     os.makedirs("saved_results")
 
 # --- INITIALIZE SESSION STATES ---
-if 'notifications' not in st.session_state: st.session_state.notifications = []
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'reset_mode' not in st.session_state: st.session_state.reset_mode = False
 if 'detection_data' not in st.session_state: st.session_state.detection_data = None
 if 'active_review' not in st.session_state: st.session_state.active_review = None
+if 'auto_lat' not in st.session_state: st.session_state.auto_lat = 28.6139
+if 'auto_lon' not in st.session_state: st.session_state.auto_lon = 77.2090
 
 # --- EMAIL FUNCTION ---
 def send_email(subject, body, to_email):
@@ -53,6 +54,10 @@ def setup_db():
                   potholes INTEGER, cracks INTEGER, image_path TEXT, user_email TEXT)''')
     curr.execute('''CREATE TABLE IF NOT EXISTS users 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT UNIQUE, password TEXT)''')
+    # Persistence ke liye notification table
+    curr.execute('''CREATE TABLE IF NOT EXISTS pending_reports 
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, user_email TEXT, lat REAL, lon REAL, 
+                  potholes INTEGER, cracks INTEGER, timestamp TEXT, image_path TEXT)''')
     conn.commit(); conn.close()
 
 def login_user(email, password):
@@ -92,19 +97,13 @@ if not st.session_state.logged_in:
         tab_login, tab_signup = st.tabs(["Login", "Sign Up"])
         with tab_login:
             with st.form("login_form"):
-                le = st.text_input("Email", value="") # Line 95 modified
+                le = st.text_input("Email", value="") 
                 lp = st.text_input("Password", type="password")
                 if st.form_submit_button("Login", use_container_width=True):
                     if login_user(le, lp):
                         st.session_state.logged_in, st.session_state.user_email = True, le
-                        
-                        # --- NOTIFICATION LOGIC ADDED HERE ---
                         if le != ADMIN_EMAIL:
-                            subject = "🔔 New User Login Alert"
-                            body = f"User {le} ne abhi AI Road Damage Detector par login kiya hai."
-                            send_email(subject, body, ADMIN_EMAIL)
-                        # --------------------------------------
-                        
+                            send_email("🔔 New User Login Alert", f"User {le} ne login kiya hai.", ADMIN_EMAIL)
                         st.rerun()
                     else: st.error("❌ Invalid Credentials")
             if st.button("Forgot Password?"): st.session_state.reset_mode = True; st.rerun()
@@ -125,6 +124,7 @@ if not st.session_state.logged_in:
                         except: st.error("❌ Email exists!")
                     else: st.error("❌ Check details!")
     st.stop()
+
 # --- 3. MAIN INTERFACE ---
 is_admin = (st.session_state.user_email == ADMIN_EMAIL)
 
@@ -135,23 +135,30 @@ with st.sidebar:
     
     st.markdown("---")
     if is_admin:
-        notif_count = len(st.session_state.notifications)
+        conn = sqlite3.connect(DB_NAME)
+        pending_reports = pd.read_sql_query("SELECT * FROM pending_reports", conn)
+        conn.close()
+        
+        notif_count = len(pending_reports)
         st.markdown(f"### 🔔 Notifications: `{notif_count}`")
         if notif_count > 0:
             with st.expander("📩 Review Pending Reports", expanded=True):
-                for i, res in enumerate(st.session_state.notifications):
-                    if st.button(f"Report {i+1} from {res['user']}", key=f"notif_{i}", use_container_width=True):
-                        st.session_state.active_review = res
-                        st.session_state.active_index = i
-                        st.session_state.detection_data = res
+                for i, row in pending_reports.iterrows():
+                    if st.button(f"Report {row['id']} from {row['user_email']}", key=f"notif_{row['id']}", use_container_width=True):
+                        st.session_state.active_review = row.to_dict()
+                        st.session_state.detection_data = row.to_dict()
+                        st.session_state.active_index = row['id']
 
     st.markdown("---")
     uploaded_file = st.file_uploader("📷 Step 1: Upload Image", type=['jpg', 'jpeg', 'png'])
     if st.button("📍 Get My Live Location"):
         loc = streamlit_js_eval(data_of='getCurrentPosition', key='get_loc')
-        if loc: st.session_state.auto_lat, st.session_state.auto_lon = loc['coords']['latitude'], loc['coords']['longitude']
-    u_lat = st.number_input("Lat", value=st.session_state.get('auto_lat', 28.6139), format="%.6f")
-    u_lon = st.number_input("Lon", value=st.session_state.get('auto_lon', 77.2090), format="%.6f")
+        if loc:
+            st.session_state.auto_lat, st.session_state.auto_lon = loc['coords']['latitude'], loc['coords']['longitude']
+            st.rerun()
+            
+    u_lat = st.number_input("Lat", value=st.session_state.auto_lat, format="%.6f")
+    u_lon = st.number_input("Lon", value=st.session_state.auto_lon, format="%.6f")
     
     st.markdown("---")
     st.success("✅ **Step 3:** Report check karne ke liye **Historical Data** tab par click karein")
@@ -163,7 +170,7 @@ yolo_model = load_yolo()
 st.markdown("<h2 style='text-align: center;'>🛣️ AI ROAD DAMAGE DETECTOR</h2>", unsafe_allow_html=True)
 tab_dash, tab_hist = st.tabs(["🖥️ Dashboard", "📂 Historical Data"])
 
-# --- TAB 1: DASHBOARD (Restored Graph & Map) ---
+# --- TAB 1: DASHBOARD ---
 with tab_dash:
     if uploaded_file and st.button("🚀 Run AI Detection", type="primary"):
         img = Image.open(uploaded_file)
@@ -173,54 +180,59 @@ with tab_dash:
         p_count = sum(1 for lid in labels if 'pothole' in yolo_model.names[int(lid)].lower())
         c_count = len(labels) - p_count
         
+        path = f"saved_results/res_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+        Image.fromarray(res_img).save(path)
+        
         st.session_state.active_review = None
         st.session_state.detection_data = {
-            "user": st.session_state.user_email, "potholes": p_count, "cracks": c_count,
-            "lat": u_lat, "lon": u_lon, "image": res_img, "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "user_email": st.session_state.user_email, "potholes": p_count, "cracks": c_count,
+            "lat": u_lat, "lon": u_lon, "image_path": path, "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
+        
         if not is_admin:
-            st.session_state.notifications.append(st.session_state.detection_data)
+            conn = sqlite3.connect(DB_NAME)
+            conn.execute("INSERT INTO pending_reports (user_email, lat, lon, potholes, cracks, timestamp, image_path) VALUES (?,?,?,?,?,?,?)",
+                         (st.session_state.user_email, u_lat, u_lon, p_count, c_count, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), path))
+            conn.commit(); conn.close()
             st.toast("Report sent to Admin!")
 
     if st.session_state.detection_data:
         det = st.session_state.detection_data
         col1, col2 = st.columns([2, 1])
         with col1:
-            st.image(det['image'], caption="AI View", use_container_width=True)
+            if det.get('image_path') and os.path.exists(det['image_path']):
+                st.image(det['image_path'], caption="AI View", use_container_width=True)
         with col2:
             st.write(f"### 🕳️ Potholes: {det['potholes']}")
             st.write(f"### ⚡ Cracks: {det['cracks']}")
             st.markdown("##### 📋 Data Summary")
-            summary_df = pd.DataFrame({"Field": ["User", "Lat", "Lon", "Time"], "Value": [det['user'], str(det['lat']), str(det['lon']), det['time']]})
+            summary_df = pd.DataFrame({"Field": ["User", "Lat", "Lon", "Time"], "Value": [det.get('user_email', 'N/A'), str(det['lat']), str(det['lon']), det.get('timestamp', 'N/A')]})
             st.table(summary_df)
 
             if is_admin:
                 if st.session_state.active_review:
                     if st.button("✅ Approve & Save", use_container_width=True, type="primary"):
-                        path = f"saved_results/rep_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
-                        Image.fromarray(det['image']).save(path)
                         conn = sqlite3.connect(DB_NAME)
                         conn.execute("INSERT INTO road_logs (timestamp, lat, lon, potholes, cracks, image_path, user_email) VALUES (?,?,?,?,?,?,?)", 
-                                     (det['time'], det['lat'], det['lon'], det['potholes'], det['cracks'], path, det['user']))
+                                     (det['timestamp'], det['lat'], det['lon'], det['potholes'], det['cracks'], det['image_path'], det['user_email']))
+                        conn.execute("DELETE FROM pending_reports WHERE id = ?", (st.session_state.active_index,))
                         conn.commit(); conn.close()
-                        st.session_state.notifications.pop(st.session_state.active_index)
                         st.session_state.active_review = None; st.session_state.detection_data = None
                         st.rerun()
                     if st.button("🗑️ Discard", use_container_width=True):
-                        st.session_state.notifications.pop(st.session_state.active_index)
+                        conn = sqlite3.connect(DB_NAME)
+                        conn.execute("DELETE FROM pending_reports WHERE id = ?", (st.session_state.active_index,))
+                        conn.commit(); conn.close()
                         st.session_state.active_review = None; st.session_state.detection_data = None
                         st.rerun()
                 else:
                     if st.button("💾 Save Directly", use_container_width=True):
-                        path = f"saved_results/admin_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
-                        Image.fromarray(det['image']).save(path)
                         conn = sqlite3.connect(DB_NAME)
                         conn.execute("INSERT INTO road_logs (timestamp, lat, lon, potholes, cracks, image_path, user_email) VALUES (?,?,?,?,?,?,?)", 
-                                     (det['time'], det['lat'], det['lon'], det['potholes'], det['cracks'], path, det['user']))
+                                     (det['timestamp'], det['lat'], det['lon'], det['potholes'], det['cracks'], det['image_path'], det['user_email']))
                         conn.commit(); conn.close()
                         st.success("Admin Data Saved!")
 
-        # RESTORED GRAPH & MAP
         st.markdown("---")
         st.subheader("📊 Damage Analysis Graph")
         chart_data = pd.DataFrame({"Count": [det['potholes'], det['cracks']]}, index=["Potholes", "Cracks"])
@@ -229,7 +241,7 @@ with tab_dash:
         st.markdown("---")
         st.subheader("🗺️ Live Location Map")
         m = folium.Map(location=[det['lat'], det['lon']], zoom_start=15)
-        folium.Marker([det['lat'], det['lon']], popup=f"Detected by {det['user']}").add_to(m)
+        folium.Marker([det['lat'], det['lon']], popup=f"Location").add_to(m)
         st_folium(m, width=1000, height=400)
 
 # --- TAB 2: HISTORICAL DATA ---
