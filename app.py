@@ -21,7 +21,7 @@ SENDER_EMAIL = "ss6929043@gmail.com"
 SENDER_PASS = st.secrets.get("GMAIL_PASS", "") 
 
 if not os.path.exists("saved_results"):
-    os.makedirs("saved_results")
+    os.makedirs("saved_results", exist_ok=True)
 
 # --- INITIALIZE SESSION STATES ---
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
@@ -152,25 +152,25 @@ with st.sidebar:
     st.markdown("---")
     uploaded_file = st.file_uploader("📷 Step 1: Upload Image", type=['jpg', 'jpeg', 'png'])
     
-    # --- YAHAN HAI LIVE LOCATION FIX ---
-    st.markdown("### 📍 GPS Status")
+    # --- LIVE LOCATION BUTTON LOGIC ---
+    st.markdown("### 📍 GPS Control")
     
-    # Ye line har refresh par current position check karegi
-    loc = streamlit_js_eval(data_of='getCurrentPosition', key='get_user_gps')
-    
-    if loc:
-        st.session_state.auto_lat = loc['coords']['latitude']
-        st.session_state.auto_lon = loc['coords']['longitude']
-        st.success("Location Captured! ✅")
-    else:
-        st.warning("Fetching GPS... 📡 (Make sure Location is ON)")
-            
-    # Ye fields automatic update ho jayenge jab upar location milegi
+    # Aapka chahita button - is par click karte hi browser location mangega
+    if st.button("🌐 Get Live Location"):
+        loc = streamlit_js_eval(data_of='getCurrentPosition', key='get_gps_btn')
+        if loc:
+            st.session_state.auto_lat = loc['coords']['latitude']
+            st.session_state.auto_lon = loc['coords']['longitude']
+            st.success("Location Updated! ✅")
+        else:
+            st.warning("📡 Waiting for GPS signal...")
+
+    # Ye input boxes hamesha latest value dikhayenge aur Admin ko yahi se data jayega
     u_lat = st.number_input("Lat", value=st.session_state.auto_lat, format="%.6f")
     u_lon = st.number_input("Lon", value=st.session_state.auto_lon, format="%.6f")
     
     st.markdown("---")
-    
+
     st.success("✅ **Step 3:** Report check karne ke liye **Historical Data** tab par click karein")
 
 @st.cache_resource
