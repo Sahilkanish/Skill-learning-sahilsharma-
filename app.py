@@ -51,13 +51,12 @@ def setup_db():
     curr = conn.cursor()
     curr.execute('''CREATE TABLE IF NOT EXISTS road_logs 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, lat REAL, lon REAL, 
-                  potholes INTEGER, cracks INTEGER, image_path TEXT, user_email TEXT)''')
+                 potholes INTEGER, cracks INTEGER, image_path TEXT, user_email TEXT)''')
     curr.execute('''CREATE TABLE IF NOT EXISTS users 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT UNIQUE, password TEXT)''')
-    # Persistence ke liye notification table
     curr.execute('''CREATE TABLE IF NOT EXISTS pending_reports 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, user_email TEXT, lat REAL, lon REAL, 
-                  potholes INTEGER, cracks INTEGER, timestamp TEXT, image_path TEXT)''')
+                 potholes INTEGER, cracks INTEGER, timestamp TEXT, image_path TEXT)''')
     conn.commit(); conn.close()
 
 def login_user(email, password):
@@ -102,8 +101,9 @@ if not st.session_state.logged_in:
                 if st.form_submit_button("Login", use_container_width=True):
                     if login_user(le, lp):
                         st.session_state.logged_in, st.session_state.user_email = True, le
+                        # --- LOGIN ALERT GMAIL ---
                         if le != ADMIN_EMAIL:
-                            send_email("🔔 New User Login Alert", f"User {le} ne login kiya hai.", ADMIN_EMAIL)
+                            send_email("🔔 New Login", f"User {le} logged in.", ADMIN_EMAIL)
                         st.rerun()
                     else: st.error("❌ Invalid Credentials")
             if st.button("Forgot Password?"): st.session_state.reset_mode = True; st.rerun()
@@ -138,7 +138,6 @@ with st.sidebar:
         conn = sqlite3.connect(DB_NAME)
         pending_reports = pd.read_sql_query("SELECT * FROM pending_reports", conn)
         conn.close()
-        
         notif_count = len(pending_reports)
         st.markdown(f"### 🔔 Notifications: `{notif_count}`")
         if notif_count > 0:
@@ -151,17 +150,20 @@ with st.sidebar:
 
     st.markdown("---")
     uploaded_file = st.file_uploader("📷 Step 1: Upload Image", type=['jpg', 'jpeg', 'png'])
+    
+    # --- LIVE LOCATION BUTTON (FIXED) ---
     if st.button("📍 Get My Live Location"):
         loc = streamlit_js_eval(data_of='getCurrentPosition', key='get_loc')
         if loc:
-            st.session_state.auto_lat, st.session_state.auto_lon = loc['coords']['latitude'], loc['coords']['longitude']
-            st.rerun()
+            st.session_state.auto_lat = loc['coords']['latitude']
+            st.session_state.auto_lon = loc['coords']['longitude']
+            st.rerun() # Refresh taaki boxes update ho jayein
             
     u_lat = st.number_input("Lat", value=st.session_state.auto_lat, format="%.6f")
     u_lon = st.number_input("Lon", value=st.session_state.auto_lon, format="%.6f")
     
     st.markdown("---")
-    st.success("✅ **Step 3:** Report check karne ke liye **Historical Data** tab par click karein")
+    st.success("✅ **Step 3:** Use Historical Data Tab")
 
 @st.cache_resource
 def load_yolo(): return YOLO('best.pt') if os.path.exists('best.pt') else None
