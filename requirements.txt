@@ -1,8 +1,7 @@
 streamlit
 ultralytics
-pillow
+opencv-python-headless
 pandas
 folium
 streamlit-folium
 streamlit-js-eval
-opencv-python-headless
