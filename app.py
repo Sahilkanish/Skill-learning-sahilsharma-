@@ -21,7 +21,7 @@ SENDER_EMAIL = "ss6929043@gmail.com"
 SENDER_PASS = st.secrets.get("GMAIL_PASS", "") 
 
 if not os.path.exists("saved_results"):
-    os.makedirs("saved_results", exist_ok=True)
+    os.makedirs("saved_results")
 
 # --- INITIALIZE SESSION STATES ---
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
@@ -54,6 +54,7 @@ def setup_db():
                   potholes INTEGER, cracks INTEGER, image_path TEXT, user_email TEXT)''')
     curr.execute('''CREATE TABLE IF NOT EXISTS users 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT UNIQUE, password TEXT)''')
+    # Persistence ke liye notification table
     curr.execute('''CREATE TABLE IF NOT EXISTS pending_reports 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, user_email TEXT, lat REAL, lon REAL, 
                   potholes INTEGER, cracks INTEGER, timestamp TEXT, image_path TEXT)''')
@@ -133,12 +134,11 @@ with st.sidebar:
         st.session_state.logged_in = False; st.rerun()
     
     st.markdown("---")
-    
-    # Admin notification logic (isko mat chhedna)
     if is_admin:
         conn = sqlite3.connect(DB_NAME)
         pending_reports = pd.read_sql_query("SELECT * FROM pending_reports", conn)
         conn.close()
+        
         notif_count = len(pending_reports)
         st.markdown(f"### 🔔 Notifications: `{notif_count}`")
         if notif_count > 0:
@@ -152,35 +152,43 @@ with st.sidebar:
     st.markdown("---")
     uploaded_file = st.file_uploader("📷 Step 1: Upload Image", type=['jpg', 'jpeg', 'png'])
     
-    # --- LIVE LOCATION BUTTON LOGIC ---
-    st.markdown("### 📍 GPS Control")
-    
-    # Aapka chahita button - is par click karte hi browser location mangega
-    loc = streamlit_js_eval(
-    js_expressions="""
-    new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(
-            (pos) => resolve(pos),
-            (err) => resolve(null)
-        );
-    })
-    """,
-    key="live_location"
-)
-    if st.button("🌐 Get Live Location"):
-     if loc and 'coords' in loc:
-        st.session_state.auto_lat = loc['coords']['latitude']
-        st.session_state.auto_lon = loc['coords']['longitude']
-        st.success("Location Updated! ✅")
-    else:
-        st.warning("📡 Location allow karo aur dubara click karo")
+    loc = None
+    if st.button("📍 Get My Live Location"):
 
-    # Ye input boxes hamesha latest value dikhayenge aur Admin ko yahi se data jayega
+     loc = streamlit_js_eval(
+        js_expressions="""
+        new Promise((resolve) => {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    resolve({
+                        lat: pos.coords.latitude,
+                        lon: pos.coords.longitude
+                    });
+                },
+                (err) => {
+                    resolve(null);
+                },
+                {
+                    enableHighAccuracy: true
+                }
+            );
+        })
+        """,
+        key="get_loc"
+    )
+
+    if loc:
+        st.session_state.auto_lat = loc["lat"]
+        st.session_state.auto_lon = loc["lon"]
+        st.success("✅ Live Location Updated")
+        st.rerun()
+    else:
+        st.error("❌ Location permission allow karo browser me")
+            
     u_lat = st.number_input("Lat", value=st.session_state.auto_lat, format="%.6f")
     u_lon = st.number_input("Lon", value=st.session_state.auto_lon, format="%.6f")
     
     st.markdown("---")
-
     st.success("✅ **Step 3:** Report check karne ke liye **Historical Data** tab par click karein")
 
 @st.cache_resource
@@ -264,7 +272,7 @@ with tab_dash:
         folium.Marker([det['lat'], det['lon']], popup=f"Location").add_to(m)
         st_folium(m, width=1000, height=400)
 
-# --- TAB 2: HISTORICAL DATA (Wahi Exact Format) ---
+# --- TAB 2: HISTORICAL DATA ---
 with tab_hist:
     if is_admin:
         st.header("📂 Data Management & Records")
@@ -323,3 +331,4 @@ with tab_hist:
         conn.close()
     else:
         st.warning("Admin access only.")
+        
