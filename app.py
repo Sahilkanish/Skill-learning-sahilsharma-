@@ -182,7 +182,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.success("✅ **Step 3:** Report check karne ke liye **Historical Data** tab par click karein")
-    
+
 
 @st.cache_resource
 def load_yolo(): return YOLO('best.pt') if os.path.exists('best.pt') else None
@@ -260,10 +260,26 @@ with tab_dash:
         st.bar_chart(chart_data)
 
         st.markdown("---")
-        st.subheader("🗺️ Live Location Map")
-        m = folium.Map(location=[det['lat'], det['lon']], zoom_start=15)
-        folium.Marker([det['lat'], det['lon']], popup=f"Location").add_to(m)
+        st.markdown("---")
+st.subheader("🗺️ Live Location Map")
+
+lat = det.get('lat')
+lon = det.get('lon')
+
+# 🔥 Safety check
+if lat is not None and lon is not None:
+    try:
+        lat = float(lat)
+        lon = float(lon)
+
+        m = folium.Map(location=[lat, lon], zoom_start=15)
+        folium.Marker([lat, lon], popup="Location").add_to(m)
         st_folium(m, width=1000, height=400)
+
+    except:
+        st.error("❌ Invalid location data")
+else:
+    st.warning("📍 Location not available. Please allow location or enter manually.")
 
 # --- TAB 2: HISTORICAL DATA ---
 with tab_hist:
