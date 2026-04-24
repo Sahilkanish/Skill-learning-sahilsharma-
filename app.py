@@ -263,23 +263,27 @@ with tab_dash:
         st.markdown("---")
 st.subheader("🗺️ Live Location Map")
 
-lat = det.get('lat')
-lon = det.get('lon')
+det = st.session_state.get("detection_data")
 
-# 🔥 Safety check
-if lat is not None and lon is not None:
-    try:
-        lat = float(lat)
-        lon = float(lon)
+if det:
+    lat = det.get('lat')
+    lon = det.get('lon')
 
-        m = folium.Map(location=[lat, lon], zoom_start=15)
-        folium.Marker([lat, lon], popup="Location").add_to(m)
-        st_folium(m, width=1000, height=400)
+    if lat is not None and lon is not None:
+        try:
+            lat = float(lat)
+            lon = float(lon)
 
-    except:
-        st.error("❌ Invalid location data")
+            m = folium.Map(location=[lat, lon], zoom_start=15)
+            folium.Marker([lat, lon], popup="Location").add_to(m)
+            st_folium(m, width=1000, height=400)
+
+        except:
+            st.error("❌ Invalid location data")
+    else:
+        st.warning("📍 Location not available.")
 else:
-    st.warning("📍 Location not available. Please allow location or enter manually.")
+    st.info("ℹ️ Pehle detection run karo ya report select karo")
 
 # --- TAB 2: HISTORICAL DATA ---
 with tab_hist:
