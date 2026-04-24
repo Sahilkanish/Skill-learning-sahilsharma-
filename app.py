@@ -11,6 +11,7 @@ import os
 import smtplib
 import random
 from email.message import EmailMessage
+from streamlit_geolocation import streamlit_geolocation
 
 # --- 1. CONFIGURATION ---
 st.set_page_config(page_title="AI Road Damage Detector", layout="wide")
@@ -158,40 +159,30 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # Location button sidebar me hi
+    # Button sidebar me hi rahega
     if st.button("📍 Get My Live Location", use_container_width=True):
-        loc = streamlit_js_eval(
-            js_expressions="""
-            new Promise((resolve) => {
-                navigator.geolocation.getCurrentPosition(
-                    (pos) => {
-                        resolve({
-                            lat: pos.coords.latitude,
-                            lon: pos.coords.longitude
-                        });
-                    },
-                    (err) => {
-                        resolve(null);
-                    }
-                );
-            })
-            """,
-            key="get_loc"
-        )
+        st.session_state.get_loc = True
 
-        if loc:
-            st.session_state.auto_lat = loc["lat"]
-            st.session_state.auto_lon = loc["lon"]
+    # Location fetch logic
+    if st.session_state.get("get_loc", False):
+        from streamlit_geolocation import streamlit_geolocation
+        location = streamlit_geolocation()
+
+        if location:
+            st.session_state.auto_lat = location["latitude"]
+            st.session_state.auto_lon = location["longitude"]
             st.success("✅ Live Location Updated")
+            st.session_state.get_loc = False
         else:
-            st.error("❌ Location permission allow karo browser me")
+            st.warning("📍 Location allow karo browser me")
 
-    # Always show current values
+    # Always show values in sidebar
     u_lat = st.number_input("Lat", value=st.session_state.auto_lat, format="%.6f")
     u_lon = st.number_input("Lon", value=st.session_state.auto_lon, format="%.6f")
-    
+
     st.markdown("---")
     st.success("✅ **Step 3:** Report check karne ke liye **Historical Data** tab par click karein")
+    
 
 @st.cache_resource
 def load_yolo(): return YOLO('best.pt') if os.path.exists('best.pt') else None
