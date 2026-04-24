@@ -152,39 +152,41 @@ with st.sidebar:
     st.markdown("---")
     uploaded_file = st.file_uploader("📷 Step 1: Upload Image", type=['jpg', 'jpeg', 'png'])
     
-    loc = None
-    if st.button("📍 Get My Live Location"):
+    
+    # Button click pe hi location fetch karo
+with st.sidebar:
 
-     loc = streamlit_js_eval(
-        js_expressions="""
-        new Promise((resolve) => {
-            navigator.geolocation.getCurrentPosition(
-                (pos) => {
-                    resolve({
-                        lat: pos.coords.latitude,
-                        lon: pos.coords.longitude
-                    });
-                },
-                (err) => {
-                    resolve(null);
-                },
-                {
-                    enableHighAccuracy: true
-                }
-            );
-        })
-        """,
-        key="get_loc"
-    )
+    st.markdown("---")
 
-    if loc:
-        st.session_state.auto_lat = loc["lat"]
-        st.session_state.auto_lon = loc["lon"]
-        st.success("✅ Live Location Updated")
-        st.rerun()
-    else:
-        st.error("❌ Location permission allow karo browser me")
-            
+    # Location button sidebar me hi
+    if st.button("📍 Get My Live Location", use_container_width=True):
+        loc = streamlit_js_eval(
+            js_expressions="""
+            new Promise((resolve) => {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        resolve({
+                            lat: pos.coords.latitude,
+                            lon: pos.coords.longitude
+                        });
+                    },
+                    (err) => {
+                        resolve(null);
+                    }
+                );
+            })
+            """,
+            key="get_loc"
+        )
+
+        if loc:
+            st.session_state.auto_lat = loc["lat"]
+            st.session_state.auto_lon = loc["lon"]
+            st.success("✅ Live Location Updated")
+        else:
+            st.error("❌ Location permission allow karo browser me")
+
+    # Always show current values
     u_lat = st.number_input("Lat", value=st.session_state.auto_lat, format="%.6f")
     u_lon = st.number_input("Lon", value=st.session_state.auto_lon, format="%.6f")
     
