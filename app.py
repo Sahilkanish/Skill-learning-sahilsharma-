@@ -283,7 +283,7 @@ if det:
     else:
         st.warning("📍 Location not available.")
 else:
-    st.info("ℹ️ Pehle detection run karo ya report select karo")
+    st.info("ℹ️ Pehle detection run karo ")
 
 # --- TAB 2: HISTORICAL DATA ---
 with tab_hist:
