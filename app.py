@@ -21,7 +21,7 @@ SENDER_EMAIL = "ss6929043@gmail.com"
 SENDER_PASS = st.secrets.get("GMAIL_PASS", "") 
 
 if not os.path.exists("saved_results"):
-    os.makedirs("saved_results", exist_ok=True)
+    os.makedirs("saved_results")
 
 # --- INITIALIZE SESSION STATES ---
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
@@ -78,9 +78,9 @@ if not st.session_state.logged_in:
                 st.success("Done!"); st.session_state.reset_mode = False; st.rerun()
         if st.button("Back"): st.session_state.reset_mode = False; st.rerun()
     else:
-        tab_login, tab_signup = st.tabs(["Login", "Sign Up"])
-        with tab_login:
-            with st.form("login"):
+        t1, t2 = st.tabs(["Login", "Sign Up"])
+        with t1:
+            with st.form("l"):
                 le, lp = st.text_input("Email"), st.text_input("Password", type="password")
                 if st.form_submit_button("Login"):
                     conn = sqlite3.connect(DB_NAME); d = conn.execute("SELECT password FROM users WHERE email=?", (le,)).fetchone(); conn.close()
@@ -90,8 +90,8 @@ if not st.session_state.logged_in:
                         st.rerun()
                     else: st.error("Invalid Credentials")
             if st.button("Forgot Password?"): st.session_state.reset_mode = True; st.rerun()
-        with tab_signup:
-            with st.form("signup"):
+        with t2:
+            with st.form("s"):
                 ne, npw, ncp = st.text_input("Email"), st.text_input("Pass", type="password"), st.text_input("Confirm", type="password")
                 if st.form_submit_button("Sign Up"):
                     if ne and npw == ncp:
@@ -103,7 +103,7 @@ if not st.session_state.logged_in:
 
 is_admin = (st.session_state.user_email == ADMIN_EMAIL)
 
-# --- 3. SIDEBAR (LOCATION LOGIC FIXED) ---
+# --- 3. SIDEBAR ---
 with st.sidebar:
     st.info(f"👤 {st.session_state.user_email}")
     if st.button("Logout"): 
@@ -128,19 +128,16 @@ with st.sidebar:
     st.markdown("---")
     uploaded_file = st.file_uploader("📷 Step 1: Upload Image", type=['jpg', 'jpeg', 'png'])
     
-    # Live Geolocation Logic
-    loc_data = streamlit_geolocation()
-    if st.button("📍 Step 2: Get Live Location", use_container_width=True):
-        if loc_data and loc_data.get("latitude"):
-            st.session_state.auto_lat = loc_data["latitude"]
-            st.session_state.auto_lon = loc_data["longitude"]
-            st.success("✅ Location Updated!")
+    loc = streamlit_geolocation()
+    if st.button("📍 Step 2: Get Location", use_container_width=True):
+        if loc and loc.get("latitude"):
+            st.session_state.auto_lat = float(loc["latitude"])
+            st.session_state.auto_lon = float(loc["longitude"])
+            st.toast("Location Updated!")
             st.rerun()
-        else:
-            st.warning("⚠️ Please allow location access in your browser.")
             
-    u_lat = st.number_input("Lat", value=st.session_state.auto_lat, format="%.6f", key="lat_box")
-    u_lon = st.number_input("Lon", value=st.session_state.auto_lon, format="%.6f", key="lon_box")
+    u_lat = st.number_input("Lat", value=st.session_state.auto_lat, format="%.6f", key="lat_input")
+    u_lon = st.number_input("Lon", value=st.session_state.auto_lon, format="%.6f", key="lon_input")
 
 # --- 4. MAIN DASHBOARD ---
 @st.cache_resource
@@ -171,11 +168,15 @@ with tab_dash:
             conn.execute("INSERT INTO pending_reports (user_email, lat, lon, potholes, cracks, timestamp, image_path) VALUES (?,?,?,?,?,?,?)", 
                          (st.session_state.user_email, u_lat, u_lon, p_cnt, c_cnt, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), path))
             conn.commit(); conn.close()
-            st.success("✅ Report sent to Admin!")
+            st.success("✅ Report successfully sent to Admin!")
+            st.session_state.active_review = False
+        else:
+            st.session_state.active_review = False 
 
     if st.session_state.detection_data:
         det = st.session_state.detection_data
-        # Layout: Image and Table side-by-side
+        
+        # --- TOP SECTION: IMAGE & TABLE ---
         c_l, c_r = st.columns([1.5, 1])
         with c_l: st.image(det['image_path'], use_container_width=True)
         with c_r:
@@ -183,55 +184,61 @@ with tab_dash:
             st.table(pd.DataFrame({"Param": ["User", "Lat", "Lon", "Potholes", "Cracks"], 
                                    "Value": [det.get('user_email'), det['lat'], det['lon'], det['potholes'], det['cracks']]}))
             
+            if det['potholes'] > 3: st.error("🔴 **ROAD IS DAMAGED**")
+            elif det['potholes'] >= 1: st.warning("🟠 **ROAD REPAIR NEEDED**")
+            else: st.success("🟢 **ROAD IS GOOD**")
+
+            # Admin Buttons Logic
             if is_admin:
                 st.markdown("---")
-                b_c1, b_c2 = st.columns(2)
-                if st.session_state.get('active_review'):
-                    if b_c1.button("✅ Approve", use_container_width=True):
+                b_col1, b_col2 = st.columns(2)
+                if st.session_state.active_review:
+                    if b_col1.button("✅ Approve & Save", use_container_width=True):
                         conn = sqlite3.connect(DB_NAME)
                         conn.execute("INSERT INTO road_logs (timestamp, lat, lon, potholes, cracks, image_path, user_email) VALUES (?,?,?,?,?,?,?)", 
                                      (det['timestamp'], det['lat'], det['lon'], det['potholes'], det['cracks'], det['image_path'], det['user_email']))
                         conn.execute("DELETE FROM pending_reports WHERE id=?", (st.session_state.active_index,))
                         conn.commit(); conn.close()
                         st.session_state.detection_data = None; st.session_state.active_review = False; st.rerun()
-                    if b_c2.button("❌ Discard", use_container_width=True):
+                    if b_col2.button("❌ Discard Report", use_container_width=True):
                         conn = sqlite3.connect(DB_NAME); conn.execute("DELETE FROM pending_reports WHERE id=?", (st.session_state.active_index,)); conn.commit(); conn.close()
                         st.session_state.detection_data = None; st.session_state.active_review = False; st.rerun()
                 else:
-                    if b_c1.button("💾 Save", use_container_width=True):
+                    if b_col1.button("💾 Save to Records", use_container_width=True):
                         conn = sqlite3.connect(DB_NAME)
                         conn.execute("INSERT INTO road_logs (timestamp, lat, lon, potholes, cracks, image_path, user_email) VALUES (?,?,?,?,?,?,?)", 
                                      (det['timestamp'], det['lat'], det['lon'], det['potholes'], det['cracks'], det['image_path'], st.session_state.user_email))
                         conn.commit(); conn.close()
                         st.success("Saved!"); st.session_state.detection_data = None; st.rerun()
+                    if b_col2.button("🗑️ Discard", use_container_width=True):
+                        st.session_state.detection_data = None; st.rerun()
+            else:
+                st.info("ℹ️ Data has been sent to the Admin Dashboard.")
 
-        # Graphs
+        # --- MIDDLE SECTION: GRAPH ---
         st.markdown("---")
         st.subheader("📊 Graph Analysis")
         st.bar_chart(pd.DataFrame({"Count": [det['potholes'], det['cracks']]}, index=["Potholes", "Cracks"]))
 
-        # Map at the absolute bottom
+        # --- BOTTOM SECTION: FULL WIDTH MAP ---
         st.markdown("---")
         st.subheader("🗺️ Damage Location Map")
         m = folium.Map(location=[det['lat'], det['lon']], zoom_start=16)
-        folium.Marker([det['lat'], det['lon']], popup="Damage Site").add_to(m)
-        st_folium(m, width=1200, height=450, key="main_map")
+        folium.Marker([det['lat'], det['lon']], popup="Reported Site", icon=folium.Icon(color='red')).add_to(m)
+        st_folium(m, width=1200, height=450, key="bottom_map")
+
+    elif is_admin:
+        st.info("👋 Admin: Select a notification or run a new detection.")
     else:
-        st.info("ℹ️ Upload image and get location to start.")
+        st.info("📷 User: Upload an image to report road damage.")
 
 with tab_hist:
     if is_admin:
         st.header("📂 Data Management & Records")
         st.info("ℹ️ Niche diye gaye drop-down list se report ka selection kre")
-        
-        report_type = st.selectbox(
-            "Select Report Category",
-            ["All Reports", "Crack", "Pothole", "user login"]
-        )
+        report_type = st.selectbox("Select Category", ["All Reports", "Crack", "Pothole", "user login"])
         
         conn = sqlite3.connect(DB_NAME)
-        
-        # Function to display image from path
         def show_report_images(df):
             for index, row in df.iterrows():
                 with st.expander(f"🖼️ View Image: Report ID {row.get('id', index)} (By: {row.get('user_email', 'N/A')})"):
@@ -239,42 +246,27 @@ with tab_hist:
                     if img_path and os.path.exists(img_path):
                         st.image(img_path, use_container_width=True)
                         st.write(f"📂 Path: {img_path}")
-                    else:
-                        st.error("❌ Image file not found on server.")
+                    else: st.error("❌ Image file not found.")
 
         if report_type == "All Reports":
             st.markdown("### 🕳️ Pothole Reports")
-            df_potholes_all = pd.read_sql_query("SELECT * FROM road_logs WHERE potholes > 0 ORDER BY timestamp DESC", conn)
-            st.dataframe(df_potholes_all, use_container_width=True)
-            show_report_images(df_potholes_all)
-            
+            df_p = pd.read_sql_query("SELECT * FROM road_logs WHERE potholes > 0 ORDER BY timestamp DESC", conn)
+            st.dataframe(df_p, use_container_width=True); show_report_images(df_p)
             st.markdown("### ⚡ Crack Reports")
-            df_cracks_all = pd.read_sql_query("SELECT * FROM road_logs WHERE cracks > 0 ORDER BY timestamp DESC", conn)
-            st.dataframe(df_cracks_all, use_container_width=True)
-            show_report_images(df_cracks_all)
-            
+            df_c = pd.read_sql_query("SELECT * FROM road_logs WHERE cracks > 0 ORDER BY timestamp DESC", conn)
+            st.dataframe(df_c, use_container_width=True); show_report_images(df_c)
             st.markdown("### 🔐 User Login Data")
-            df_users_all = pd.read_sql_query("SELECT email, password FROM users", conn)
-            st.dataframe(df_users_all, use_container_width=True)
-
+            df_l = pd.read_sql_query("SELECT email, password FROM users", conn)
+            st.dataframe(df_l, use_container_width=True)
         elif report_type == "Crack":
-            st.subheader("⚡ Crack Data Only")
-            df_cracks = pd.read_sql_query("SELECT * FROM road_logs WHERE cracks > 0", conn)
-            st.dataframe(df_cracks, use_container_width=True)
-            show_report_images(df_cracks)
-
+            df_c = pd.read_sql_query("SELECT * FROM road_logs WHERE cracks > 0", conn)
+            st.dataframe(df_c, use_container_width=True); show_report_images(df_c)
         elif report_type == "Pothole":
-            st.subheader("🕳️ Pothole Data Only")
-            df_potholes = pd.read_sql_query("SELECT * FROM road_logs WHERE potholes > 0", conn)
-            st.dataframe(df_potholes, use_container_width=True)
-            show_report_images(df_potholes)
-
+            df_p = pd.read_sql_query("SELECT * FROM road_logs WHERE potholes > 0", conn)
+            st.dataframe(df_p, use_container_width=True); show_report_images(df_p)
         elif report_type == "user login":
-            st.subheader("👤 User Credentials")
-            df_login = pd.read_sql_query("SELECT email, password FROM users", conn)
-            st.dataframe(df_login, use_container_width=True)
-            
+            df_l = pd.read_sql_query("SELECT email, password FROM users", conn)
+            st.dataframe(df_l, use_container_width=True)
         conn.close()
     else:
         st.warning("Admin access only.")
-        
