@@ -51,20 +51,21 @@ def setup_db():
     curr = conn.cursor()
     curr.execute('''CREATE TABLE IF NOT EXISTS road_logs 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, lat REAL, lon REAL, 
-                  potholes INTEGER, cracks INTEGER, image_path TEXT, user_email TEXT)''')
+                 potholes INTEGER, cracks INTEGER, image_path TEXT, user_email TEXT)''')
     curr.execute('''CREATE TABLE IF NOT EXISTS users 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT UNIQUE, password TEXT)''')
-    # Persistence ke liye notification table
     curr.execute('''CREATE TABLE IF NOT EXISTS pending_reports 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, user_email TEXT, lat REAL, lon REAL, 
-                  potholes INTEGER, cracks INTEGER, timestamp TEXT, image_path TEXT)''')
+                 potholes INTEGER, cracks INTEGER, timestamp TEXT, image_path TEXT)''')
     conn.commit(); conn.close()
 
 def login_user(email, password):
     conn = sqlite3.connect(DB_NAME)
-    data = conn.execute("SELECT password FROM users WHERE email = ?", (email,)).fetchone()
+    curr = conn.cursor()
+    curr.execute("SELECT * FROM users WHERE email = ? AND password = ?", (email, password))
+    user = curr.fetchone()
     conn.close()
-    return data[0] == password if data else False
+    return user is not None
 
 setup_db()
 
@@ -151,12 +152,17 @@ with st.sidebar:
 
     st.markdown("---")
     uploaded_file = st.file_uploader("📷 Step 1: Upload Image", type=['jpg', 'jpeg', 'png'])
-    if st.button("📍 Get My Live Location"):
+    
+    # LIVE LOCATION BUTTON LOGIC
+    if st.button("📍 Get My Live Location", type="secondary", use_container_width=True):
         loc = streamlit_js_eval(data_of='getCurrentPosition', key='get_loc')
         if loc:
-            st.session_state.auto_lat, st.session_state.auto_lon = loc['coords']['latitude'], loc['coords']['longitude']
-            st.rerun()
-            
+            st.session_state.auto_lat = loc['coords']['latitude']
+            st.session_state.auto_lon = loc['coords']['longitude']
+            st.success("✅ Your location fetched & updated!")
+        else:
+            st.error("❌ Location access denied or not found.")
+
     u_lat = st.number_input("Lat", value=st.session_state.auto_lat, format="%.6f")
     u_lon = st.number_input("Lon", value=st.session_state.auto_lon, format="%.6f")
     
@@ -240,6 +246,7 @@ with tab_dash:
 
         st.markdown("---")
         st.subheader("🗺️ Live Location Map")
+        st.info(f"📍 Ye data is location se upload hua hai: {det['lat']}, {det['lon']}")
         m = folium.Map(location=[det['lat'], det['lon']], zoom_start=15)
         folium.Marker([det['lat'], det['lon']], popup=f"Location").add_to(m)
         st_folium(m, width=1000, height=400)
@@ -257,7 +264,6 @@ with tab_hist:
         
         conn = sqlite3.connect(DB_NAME)
         
-        # Function to display image from path
         def show_report_images(df):
             for index, row in df.iterrows():
                 with st.expander(f"🖼️ View Image: Report ID {row.get('id', index)} (By: {row.get('user_email', 'N/A')})"):
@@ -303,4 +309,3 @@ with tab_hist:
         conn.close()
     else:
         st.warning("Admin access only.")
-        
