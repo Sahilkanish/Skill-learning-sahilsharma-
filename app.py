@@ -295,7 +295,6 @@ with tab_stats:
         st.warning("### 🔐 Admin Access Only")
 
 # --- TAB 2: HISTORICAL DATA ---
-# --- TAB 2: HISTORICAL DATA ---
 with tab_hist:
     if is_admin:
         st.header("📂 Data Management & Records")
@@ -339,7 +338,7 @@ with tab_hist:
                 
             conn.close()
     else:
-        st.warning("### 🔐 Admin Access Only")
+
         st.info("This section is accessible to the Admin only.")
 
 # --- TAB 3: PERFORMANCE ---
