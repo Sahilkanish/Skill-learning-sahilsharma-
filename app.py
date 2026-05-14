@@ -89,7 +89,7 @@ if not st.session_state.logged_in:
     else:
         t1, t2 = st.tabs(["Login", "Sign Up"])
         # --- Replace your Sign Up block with this ---
-with t2:
+ with t2:
     with st.form("s"):
         ne, npw, ncp = st.text_input("Email"), st.text_input("Pass", type="password"), st.text_input("Confirm", type="password")
         if st.form_submit_button("Sign Up"):
