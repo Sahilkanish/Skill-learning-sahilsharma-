@@ -393,5 +393,4 @@ with tab_stats:
             v2.success("💰 **Fiscal Savings**\n\nPreventing expensive road rebuilds.")
             v3.success("📢 **Transparency**\n\nDigitally verifiable records for accountability.")
     else:
-        st.warning("### 🔐 Admin Access Only")
         st.info("This section is accessible to the Admin only.")
