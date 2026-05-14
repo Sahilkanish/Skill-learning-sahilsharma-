@@ -112,7 +112,7 @@ if not st.session_state.logged_in:
                     else: st.error("❌ Passwords do not match or fields are empty.")
     st.stop()
 
-# --- 3. SIDEBAR (Only visible after login) ---
+# --- 3. SIDEBAR ---
 is_admin = (st.session_state.user_email == ADMIN_EMAIL)
 
 with st.sidebar:
@@ -158,12 +158,6 @@ with st.sidebar:
 
     u_lat = st.number_input("Lat", value=st.session_state.auto_lat, format="%.6f")
     u_lon = st.number_input("Lon", value=st.session_state.auto_lon, format="%.6f")
-
-    st.markdown("---")
-    st.write("📂 **Step 3: Historical Data**")
-    st.caption("Click on the 'Historical Data' tab above.")
-    st.write("📈 **Step 4: Performance Metrics**")
-    st.caption("Click on the 'Performance Metrics' tab above.")
 
 # --- 4. MAIN DASHBOARD ---
 @st.cache_resource
@@ -255,56 +249,15 @@ with tab_dash:
                       icon=folium.Icon(color='red' if det['potholes'] > 0 else 'green')).add_to(m)
         st_folium(m, width=1100, height=400, key="main_map")
 
-# --- TAB 2: HISTORICAL DATA ---
-with tab_hist:
-    if is_admin:
-        st.header("📂 Data Management & Records")
-        st.info("ℹ️ Select a category and click 'Show Records'.")
-        report_type = st.selectbox("Select Category", ["All Reports", "Crack", "Pothole", "User Logins"])
-        
-        if st.button("🔍 Show Records", use_container_width=True, type="primary"):
-            conn = sqlite3.connect(DB_NAME)
-            if report_type == "All Reports":
-                df = pd.read_sql_query("SELECT * FROM road_logs ORDER BY timestamp DESC", conn)
-            elif report_type == "Crack":
-                df = pd.read_sql_query("SELECT * FROM road_logs WHERE cracks > 0", conn)
-            elif report_type == "Pothole":
-                df = pd.read_sql_query("SELECT * FROM road_logs WHERE potholes > 0", conn)
-            elif report_type == "User Logins":
-                df = pd.read_sql_query("SELECT email FROM users", conn)
-            
-            st.dataframe(df, use_container_width=True)
-            if report_type != "User Logins":
-                for i, r in df.iterrows():
-                    with st.expander(f"View Image (ID: {r.get('id')})"):
-                        if os.path.exists(r['image_path']): st.image(r['image_path'])
-            conn.close()
-    else:
-        st.warning("### 🔐 Admin Access Only")
-
-# --- TAB 3: PERFORMANCE ---
-with tab_stats:
-    if is_admin:
-        st.header("📈 Model Performance Analysis")
-        if st.button("📊 View Performance Metrics", use_container_width=True, type="primary"):
-            st.metric("Training mAP50", "86.5%")
-            st.metric("Validation mAP50", "81.4%")
-            if os.path.exists('results.png'): st.image('results.png', caption='Accuracy & Loss Curves')
-            st.success("#### Model ready for production deployment.")
-    else:
-        st.warning("### 🔐 Admin Access Only")
-
-# --- TAB 2: HISTORICAL DATA ---
+# --- TAB 2: HISTORICAL DATA (Fixed Duplicate) ---
 with tab_hist:
     if is_admin:
         st.header("📂 Data Management & Records")
         st.info("ℹ️ Please select the report from the drop-down menu provided below.")
         
-        # Step 1: Selection
-        report_type = st.selectbox("Select Report Category", ["All Reports", "Crack", "Pothole", "user login"])
+        report_type = st.selectbox("Select Report Category", ["All Reports", "Crack", "Pothole", "user login"], key="hist_select")
         
-        # Step 2: Show Button
-        if st.button("🔍 Show Records", use_container_width=True, type="primary",key="show_hist_records"):
+        if st.button("🔍 Show Records", use_container_width=True, type="primary", key="show_hist_records"):
             conn = sqlite3.connect(DB_NAME)
             
             def show_report_images(df):
@@ -338,18 +291,15 @@ with tab_hist:
                 
             conn.close()
     else:
-
         st.info("This section is accessible to the Admin only.")
 
-# --- TAB 3: PERFORMANCE ---
-
+# --- TAB 3: PERFORMANCE (Fixed Duplicate) ---
 with tab_stats:
     if is_admin:
         st.header("📈 Model Performance Analysis")
         st.info("Please click the button below to access the technical metrics and training performance graphs.")
         
-        # Button to reveal metrics
-        if st.button("📊 View Performance Metrics", use_container_width=True, type="primary"):
+        if st.button("📊 View Performance Metrics", use_container_width=True, type="primary", key="view_metrics_btn"):
             st.markdown("### 📈 Model Accuracy vs. Testing Performance")
             col_acc1, col_acc2 = st.columns(2)
             with col_acc1:
@@ -367,30 +317,26 @@ with tab_stats:
             with col_graph_l:
                 if os.path.exists('results.png'): st.image('results.png', caption='Accuracy & Loss Curves', use_container_width=True)
             with col_graph_r:
-             st.subheader("📝 Blue-Zone Analysis")
-             st.info(""" 
-            * **mAP50 (85%):** Our model achieves an accuracy rate of over 85% in detecting road damage.
-            * **Loss Curves:** The decrease in the loss graph demonstrates that the model successfully learned from its errors during the training process.
-            * **Precision:** This means the number of false alarms is very low..
-            """)
+                st.subheader("📝 Blue-Zone Analysis")
+                st.info(""" 
+                * **mAP50 (85%):** Our model achieves an accuracy rate of over 85% in detecting road damage.
+                * **Loss Curves:** The decrease in the loss graph demonstrates that the model successfully learned from its errors.
+                * **Precision:** This means the number of false alarms is very low.
+                """)
 
             st.markdown("---")
-            st.markdown("#### 🏁 Final Report Status")
-            # Yahan final message bhi blue bar mein
             st.info(f"#### Achieving a testing accuracy of 81.4%, this model is now ready for production-level deployment.")
 
-            # Empowering User
             st.markdown("#### 🤝 Empowering the End-User")
             u1, u2, u3 = st.columns(3)
-            u1.info("**Quick Upload**\n\nSimple drag-and-drop interface for field images.")
-            u2.info("**Live Geotagging**\n\nAutomated GPS tracking for accurate location.")
-            u3.info("**Secure Access**\n\nEncrypted data and secure login for stakeholders.")
+            u1.info("**Quick Upload**\n\nSimple drag-and-drop interface.")
+            u2.info("**Live Geotagging**\n\nAutomated GPS tracking.")
+            u3.info("**Secure Access**\n\nEncrypted data and secure login.")
 
-            # Strategic Value
             st.markdown("#### 🏆 Strategic Value")
             v1, v2, v3 = st.columns(3)
-            v1.success("🛡️ **Public Safety**\n\nReducing accidents by early hazard identification.")
-            v2.success("💰 **Fiscal Savings**\n\nPreventing expensive road rebuilds.")
-            v3.success("📢 **Transparency**\n\nDigitally verifiable records for accountability.")
+            v1.success("🛡️ **Public Safety**\n\nReducing accidents.")
+            v2.success("💰 **Fiscal Savings**\n\nPreventing expensive rebuilds.")
+            v3.success("📢 **Transparency**\n\nDigitally verifiable records.")
     else:
         st.info("This section is accessible to the Admin only.")
