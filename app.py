@@ -21,7 +21,7 @@ SENDER_EMAIL = "ss6929043@gmail.com"
 SENDER_PASS = st.secrets.get("GMAIL_PASS", "") 
 
 if not os.path.exists("saved_results"):
-    os.makedirs("saved_results")
+os.makedirs("saved_results")
 
 # --- INITIALIZE SESSION STATES ---
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
