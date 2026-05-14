@@ -304,7 +304,7 @@ with tab_hist:
         report_type = st.selectbox("Select Report Category", ["All Reports", "Crack", "Pothole", "user login"])
         
         # Step 2: Show Button
-        if st.button("🔍 Show Records", use_container_width=True, type="primary"):
+        if st.button("🔍 Show Records", use_container_width=True, type="primary",key="show_hist_records"):
             conn = sqlite3.connect(DB_NAME)
             
             def show_report_images(df):
