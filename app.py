@@ -58,7 +58,9 @@ def setup_db():
     conn.commit(); conn.close()
 
 setup_db()
-
+is_admin = False
+if st.session_state.get('logged_in') and st.session_state.get('user_email') == ADMIN_EMAIL:
+    is_admin = True
 # --- 2. LOGIN SYSTEM ---
 if not st.session_state.logged_in:
     st.markdown("<h2 style='text-align: center;'>🔐 AI Road Damage Detector</h2>", unsafe_allow_html=True)
