@@ -31,20 +31,7 @@ if 'active_review' not in st.session_state: st.session_state.active_review = Fal
 if 'auto_lat' not in st.session_state: st.session_state.auto_lat = 28.6139
 if 'auto_lon' not in st.session_state: st.session_state.auto_lon = 77.2090
 
-# --- FUNCTIONS ---
-def send_email(subject, body, to_email):
-    try:
-        msg = EmailMessage()
-        msg.set_content(body)
-        msg['Subject'] = subject
-        msg['From'] = SENDER_EMAIL
-        msg['To'] = to_email
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
-            smtp.login(SENDER_EMAIL, SENDER_PASS)
-            smtp.send_message(msg)
-        return True
-    except: return False
-
+# --- DATABASE SETUP ---
 def setup_db():
     conn = sqlite3.connect(DB_NAME)
     conn.execute('''CREATE TABLE IF NOT EXISTS road_logs 
@@ -55,128 +42,114 @@ def setup_db():
     conn.execute('''CREATE TABLE IF NOT EXISTS pending_reports 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, user_email TEXT, lat REAL, lon REAL, 
                  potholes INTEGER, cracks INTEGER, timestamp TEXT, image_path TEXT)''')
-    conn.commit(); conn.close()
+    conn.commit()
+    conn.close()
 
 setup_db()
 
-# --- 2. LOGIN SYSTEM ---
+# --- LOGIN / SIGNUP UI ---
 if not st.session_state.logged_in:
-    st.markdown("<h2 style='text-align: center;'>🔐 AI Road Damage Detector</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center;'>🔐 AI Road Damage Detection System</h2>", unsafe_allow_html=True)
     
     if st.session_state.reset_mode:
-        st.subheader("🔄 Reset Password")
-        e_reset = st.text_input("Enter Email")
-        if st.button("Send OTP"):
-            otp = random.randint(1000, 9999)
-            if send_email("Reset OTP", f"Your OTP: {otp}", e_reset):
-                st.session_state.generated_otp, st.session_state.target_email = otp, e_reset
-                st.success("OTP Sent!")
-        
-        u_otp = st.text_input("Enter OTP")
-        new_pw = st.text_input("New Password", type="password")
-        if st.button("Update"):
-            if str(u_otp) == str(st.session_state.get('generated_otp')):
-                conn = sqlite3.connect(DB_NAME)
-                conn.execute("UPDATE users SET password=? WHERE email=?", (new_pw, st.session_state.target_email))
-                conn.commit(); conn.close()
-                st.success("Done!"); st.session_state.reset_mode = False; st.rerun()
-        if st.button("Back"): st.session_state.reset_mode = False; st.rerun()
-    
+        st.subheader("🔄 Reset Account Password")
+        e_reset = st.text_input("Enter Registered Email")
+        if st.button("Send Verification OTP"):
+            st.info("OTP functionality requires configured SENDER_EMAIL.")
+        if st.button("Back to Login"): 
+            st.session_state.reset_mode = False
+            st.rerun()
     else:
-        t1, t2 = st.tabs(["Login", "Sign Up"])
-        with t1:
+        tab_login, tab_signup = st.tabs(["Login", "Create Account"])
+        with tab_login:
             with st.form("login_form"):
-                le, lp = st.text_input("Email"), st.text_input("Password", type="password")
-                if st.form_submit_button("Login"):
+                le = st.text_input("Email Address")
+                lp = st.text_input("Password", type="password")
+                if st.form_submit_button("Sign In"):
                     conn = sqlite3.connect(DB_NAME)
                     d = conn.execute("SELECT password FROM users WHERE email=?", (le,)).fetchone()
                     conn.close()
                     if d and d[0] == lp:
-                        st.session_state.logged_in, st.session_state.user_email = True, le
-                        if le != ADMIN_EMAIL: send_email("Login Alert", f"User {le} logged in", ADMIN_EMAIL)
+                        st.session_state.logged_in = True
+                        st.session_state.user_email = le
                         st.rerun()
-                    else: st.error("❌ Invalid Credentials")
-            if st.button("Forgot Password?"): st.session_state.reset_mode = True; st.rerun()
+                    else: st.error("❌ Invalid email or password.")
+            if st.button("Forgot Password?"): 
+                st.session_state.reset_mode = True
+                st.rerun()
         
-        with t2:
+        with tab_signup:
             with st.form("signup_form"):
-                ne, npw, ncp = st.text_input("Email"), st.text_input("Pass", type="password"), st.text_input("Confirm", type="password")
-                if st.form_submit_button("Sign Up"):
+                ne = st.text_input("New Email")
+                npw = st.text_input("New Password", type="password")
+                ncp = st.text_input("Confirm Password", type="password")
+                if st.form_submit_button("Register"):
                     if ne and npw == ncp:
                         try:
                             conn = sqlite3.connect(DB_NAME)
                             conn.execute("INSERT INTO users (email, password) VALUES (?,?)", (ne, npw))
                             conn.commit(); conn.close()
-                            st.success("✅ Account Created! Now please Login.")
-                        except: st.error("❌ Email already exists!")
-                    else: st.error("❌ Passwords do not match or fields are empty.")
+                            st.success("✅ Registration successful! Please switch to Login tab.")
+                        except: st.error("❌ This email is already registered.")
+                    else: st.error("❌ Passwords do not match.")
     st.stop()
 
-# --- 3. SIDEBAR ---
+# --- SIDEBAR NAVIGATION ---
 is_admin = (st.session_state.user_email == ADMIN_EMAIL)
 
 with st.sidebar:
-    if is_admin:
-        st.markdown("<h3 style='color: #2ecc71; text-align: center;'>👑 Admin Mode</h3>", unsafe_allow_html=True)
-    else:
-        st.markdown("<h3 style='text-align: center;'>👤 User Mode</h3>", unsafe_allow_html=True)
+    st.title("Settings & Tools")
+    st.write(f"Logged in as: **{st.session_state.user_email}**")
     
-    st.info(f"📧 {st.session_state.user_email}")
-    
-    if st.button("🚪 Logout", use_container_width=True): 
+    if st.button("Logout"):
         st.session_state.clear()
         st.rerun()
     
+    st.markdown("---")
     if is_admin:
-        st.markdown("---")
-        conn = sqlite3.connect(DB_NAME); pending = pd.read_sql_query("SELECT * FROM pending_reports", conn); conn.close()
-        st.markdown(f"### 🔔 Notifications: `{len(pending)}`")
-        if len(pending) > 0:
-            with st.expander("📩 Review User Reports"):
-                for i, row in pending.iterrows():
-                    if st.button(f"Report {row['id']} - {row['user_email']}", key=f"n_{row['id']}"):
-                        st.session_state.detection_data = row.to_dict()
-                        st.session_state.active_review = True 
-                        st.session_state.active_index = row['id']
-                        st.rerun()
+        st.subheader("🔔 Admin Notifications")
+        conn = sqlite3.connect(DB_NAME)
+        pending = pd.read_sql_query("SELECT * FROM pending_reports", conn)
+        conn.close()
+        st.write(f"Pending Reviews: `{len(pending)}`")
+        if not pending.empty:
+            for idx, row in pending.iterrows():
+                if st.button(f"Review Report #{row['id']}", key=f"rev_{row['id']}"):
+                    st.session_state.detection_data = row.to_dict()
+                    st.session_state.active_review = True
+                    st.session_state.active_index = row['id']
+                    st.rerun()
 
     st.markdown("---")
-    st.markdown("### 🛠️ NAVIGATION STEPS")
-    uploaded_file = st.file_uploader("📷 **Step 1: Upload Image**", type=['jpg', 'jpeg', 'png'], key="file_up")
+    st.subheader("📤 Data Input")
+    uploaded_file = st.file_uploader("Upload Infrastructure Image", type=['jpg', 'jpeg', 'png'])
     
-    st.markdown("---")
-    st.write("📍 **Step 2: Get Location**")
     loc = streamlit_geolocation()
-    if st.button("Capture Live GPS", use_container_width=True, key="gps_btn"):
+    if st.button("Fetch Current GPS Location", use_container_width=True):
         if loc and loc.get("latitude"):
             st.session_state.auto_lat = float(loc["latitude"])
             st.session_state.auto_lon = float(loc["longitude"])
-            st.sidebar.success("📍 Location Updated!")
-            st.rerun()
+            st.success("Location Synced!")
 
-    u_lat = st.number_input("Lat", value=st.session_state.auto_lat, format="%.6f")
-    u_lon = st.number_input("Lon", value=st.session_state.auto_lon, format="%.6f")
+    u_lat = st.number_input("Latitude", value=st.session_state.auto_lat, format="%.6f")
+    u_lon = st.number_input("Longitude", value=st.session_state.auto_lon, format="%.6f")
 
-    st.markdown("---")
-    st.write("📂 **Step 3: Historical Data**")
-    st.caption("Click on the 'Historical Data' tab above.")
-    st.write("📈 **Step 4: Performance Metrics**")
-    st.caption("Click on the 'Performance Metrics' tab above.")
-
-# --- 4. MAIN DASHBOARD ---
+# --- MAIN APP INTERFACE ---
 @st.cache_resource
-def load_yolo(): return YOLO('best.pt') if os.path.exists('best.pt') else None
+def load_yolo(): 
+    return YOLO('best.pt') if os.path.exists('best.pt') else None
+
 yolo_model = load_yolo()
 
-st.markdown("<h2 style='text-align: center;'>🛣️ AI ROAD DAMAGE DETECTOR</h2>", unsafe_allow_html=True)
-tab_dash, tab_hist, tab_stats = st.tabs(["🖥️ Dashboard", "📂 Historical Data", "📈 Performance Metrics"])
+st.title("🛣️ Smart Infrastructure Monitoring")
+tab_dash, tab_hist, tab_stats = st.tabs(["📊 Detection Dashboard", "📂 Historical Archives", "📈 Model Analytics"])
 
+# --- TAB 1: DASHBOARD ---
 with tab_dash:
     if not st.session_state.detection_data:
-        if is_admin: st.info("👋 **Hello Admin!** Perform detection or check notifications.")
-        else: st.info("📷 **Welcome!** Follow Step 1 & 2 in the sidebar to report damage.")
+        st.info("💡 **Welcome to the Dashboard.** Please upload an image and provide coordinates via the sidebar to begin analysis.")
 
-    if uploaded_file and st.button("🚀 Run AI Detection", type="primary", use_container_width=True, key="run_ai"):
+    if uploaded_file and st.button("Execute AI Analysis", type="primary", use_container_width=True):
         img = Image.open(uploaded_file)
         res = yolo_model.predict(img, conf=0.25)
         res_img = res[0].plot()
@@ -190,88 +163,97 @@ with tab_dash:
             "user_email": st.session_state.user_email, "potholes": p_cnt, "cracks": c_cnt,
             "lat": u_lat, "lon": u_lon, "image_path": path, "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
-        st.session_state.active_review = False 
+        st.session_state.active_review = False
         
         if not is_admin:
             conn = sqlite3.connect(DB_NAME)
             conn.execute("INSERT INTO pending_reports (user_email, lat, lon, potholes, cracks, timestamp, image_path) VALUES (?,?,?,?,?,?,?)", 
                          (st.session_state.user_email, u_lat, u_lon, p_cnt, c_cnt, st.session_state.detection_data["timestamp"], path))
             conn.commit(); conn.close()
-            st.success("✅ Report successfully sent to Admin!")
+            st.success("✅ Report submitted for Administrator review.")
 
     if st.session_state.detection_data:
         det = st.session_state.detection_data
-        c_l, c_r = st.columns([1.5, 1])
-        with c_l: 
-            st.image(det['image_path'], use_container_width=True)
-        with c_r:
-            st.table(pd.DataFrame({"Param": ["User", "Lat", "Lon", "Potholes", "Cracks"], 
-                                   "Value": [det.get('user_email'), det['lat'], det['lon'], det['potholes'], det['cracks']]}))
-            if det['potholes'] > 3: st.error("🔴 **ROAD IS DAMAGED**")
-            elif det['potholes'] >= 1: st.warning("🟠 **ROAD REPAIR NEEDED**")
-            else: st.success("🟢 **ROAD IS GOOD**")
+        col_img, col_info = st.columns([1.5, 1])
+        with col_img:
+            st.image(det['image_path'], caption="AI Detection Result", use_container_width=True)
+        with col_info:
+            st.markdown("### 📋 Analysis Results")
+            st.write(f"**Submitted by:** {det['user_email']}")
+            st.write(f"**Timestamp:** {det['timestamp']}")
+            st.metric("Potholes Detected", det['potholes'])
+            st.metric("Cracks Detected", det['cracks'])
+            
+            if det['potholes'] > 3: st.error("CRITICAL: Immediate Road Repair Required")
+            elif det['potholes'] > 0: st.warning("WARNING: Maintenance Recommended")
+            else: st.success("NORMAL: Road condition is stable")
 
             if is_admin:
                 b1, b2 = st.columns(2)
                 if st.session_state.active_review:
-                    if b1.button("✅ Approve & Save", key="app_save"):
+                    if b1.button("Verify & Archive", key="admin_save"):
                         conn = sqlite3.connect(DB_NAME)
                         conn.execute("INSERT INTO road_logs (timestamp, lat, lon, potholes, cracks, image_path, user_email) VALUES (?,?,?,?,?,?,?)", 
                                      (det['timestamp'], det['lat'], det['lon'], det['potholes'], det['cracks'], det['image_path'], det['user_email']))
                         conn.execute("DELETE FROM pending_reports WHERE id=?", (st.session_state.active_index,))
                         conn.commit(); conn.close()
-                        st.success("Approved!"); st.session_state.detection_data = None; st.session_state.active_review = False; st.rerun()
-                    if b2.button("❌ Discard", key="disc_rep"):
-                        conn = sqlite3.connect(DB_NAME); conn.execute("DELETE FROM pending_reports WHERE id=?", (st.session_state.active_index,))
+                        st.success("Record Archived!"); st.session_state.detection_data = None; st.rerun()
+                    if b2.button("Reject Report", key="admin_del"):
+                        conn = sqlite3.connect(DB_NAME)
+                        conn.execute("DELETE FROM pending_reports WHERE id=?", (st.session_state.active_index,))
                         conn.commit(); conn.close()
-                        st.session_state.detection_data = None; st.session_state.active_review = False; st.rerun()
+                        st.session_state.detection_data = None; st.rerun()
                 else:
-                    if b1.button("💾 Save Record", key="save_final"):
+                    if b1.button("Save to Database", key="user_save"):
                         conn = sqlite3.connect(DB_NAME)
                         conn.execute("INSERT INTO road_logs (timestamp, lat, lon, potholes, cracks, image_path, user_email) VALUES (?,?,?,?,?,?,?)", 
                                      (det['timestamp'], det['lat'], det['lon'], det['potholes'], det['cracks'], det['image_path'], st.session_state.user_email))
                         conn.commit(); conn.close()
-                        st.success("Saved!"); st.session_state.detection_data = None; st.rerun()
+                        st.success("Saved Successfully!"); st.session_state.detection_data = None; st.rerun()
 
         st.markdown("---")
-        m = folium.Map(location=[det['lat'], det['lon']], zoom_start=16)
-        folium.Marker([det['lat'], det['lon']], popup=f"Detected by {det['user_email']}", icon=folium.Icon(color='red')).add_to(m)
-        st_folium(m, width=1100, height=400, key="main_map")
+        m = folium.Map(location=[det['lat'], det['lon']], zoom_start=15)
+        folium.Marker([det['lat'], det['lon']], popup="Detection Point").add_to(m)
+        st_folium(m, width=1000, height=350, key="dash_map")
 
 # --- TAB 2: HISTORICAL DATA ---
 with tab_hist:
     if is_admin:
-        st.header("📂 Data Management & Records")
-        st.info("ℹ️ Select a category and click 'Show Records'.")
-        report_type = st.selectbox("Select Report Category", ["All Reports", "Crack", "Pothole", "user login"], key="hist_sel")
+        st.header("📂 Data Management Center")
+        st.markdown("Filter and manage historical infrastructure records stored in the system.")
         
-        if st.button("🔍 Show Records", use_container_width=True, type="primary", key="show_hist_btn"):
+        filter_type = st.selectbox("Filter by Category", ["All Records", "Potholes Only", "Cracks Only", "User Accounts"])
+        
+        if st.button("Fetch Archive Data", use_container_width=True):
             conn = sqlite3.connect(DB_NAME)
-            
-            def show_imgs(df):
-                for i, row in df.iterrows():
-                    with st.expander(f"🖼️ View Image: ID {row.get('id', i)}"):
-                        if os.path.exists(row['image_path']): st.image(row['image_path'])
-            
-            if report_type == "All Reports":
-                df_p = pd.read_sql_query("SELECT * FROM road_logs WHERE potholes > 0 ORDER BY timestamp DESC", conn)
-                st.subheader("🕳️ Potholes"); st.dataframe(df_p); show_imgs(df_p)
-                df_c = pd.read_sql_query("SELECT * FROM road_logs WHERE cracks > 0 ORDER BY timestamp DESC", conn)
-                st.subheader("⚡ Cracks"); st.dataframe(df_c); show_imgs(df_c)
-            elif report_type == "user login":
-                st.dataframe(pd.read_sql_query("SELECT email, password FROM users", conn))
+            if filter_type == "User Accounts":
+                st.dataframe(pd.read_sql_query("SELECT id, email FROM users", conn), use_container_width=True)
             else:
-                df = pd.read_sql_query(f"SELECT * FROM road_logs WHERE {report_type.lower()}s > 0", conn)
-                st.dataframe(df); show_imgs(df)
+                query = "SELECT * FROM road_logs ORDER BY timestamp DESC"
+                df = pd.read_sql_query(query, conn)
+                st.dataframe(df, use_container_width=True)
+                for _, row in df.iterrows():
+                    with st.expander(f"Record {row['id']} - {row['timestamp']}"):
+                        st.image(row['image_path'])
             conn.close()
-    else: st.info("🔒 This section is accessible to the Admin only.")
+    else: st.info("🔒 This section is restricted to authorized Administrators.")
 
 # --- TAB 3: PERFORMANCE ---
 with tab_stats:
     if is_admin:
-        st.header("📈 Model Performance Analysis")
-        if st.button("📊 View Performance Metrics", use_container_width=True, type="primary", key="view_perf"):
-            st.markdown("### 📈 Model Accuracy")
+        st.markdown("""
+        ### 📊 Performance Analysis Overview
+        The **AI Road Damage Detector** utilizes a state-of-the-art **YOLO** architecture, 
+        specifically fine-tuned on a diverse dataset of road infrastructure. 
+        
+        The model is evaluated based on its ability to accurately localize and classify road distress 
+        features like **Potholes** and **Cracks** in real-time environments. Below are the key 
+        performance indicators and training results.
+        """)
+
+        if st.button("🔍 Generate Detailed Performance Report", use_container_width=True, type="primary"):
+            st.markdown("---")
+            st.subheader("📈 Model Training Metrics")
             c1, c2 = st.columns(2)
             c1.metric("Training mAP50", "86.5%")
             c2.metric("Validation mAP50", "81.4%")
@@ -279,12 +261,14 @@ with tab_stats:
             m1, m2, m3 = st.columns(3)
             m1.metric("Precision", "85.8%"); m2.metric("Recall", "75.2%"); m3.metric("Inference", "15ms")
 
-            if os.path.exists('results.png'): st.image('results.png', caption='Accuracy & Loss Curves')
-            st.info("#### Achieving 81.4% accuracy, this model is ready for deployment.")
+            if os.path.exists('results.png'):
+                st.image('results.png', caption='Accuracy & Loss Curves', use_container_width=True)
+            
+            st.info("💡 **Conclusion:** Achieving 81.4% accuracy, the model demonstrates high reliability for real-world deployment.")
             
             st.markdown("#### 🏆 Strategic Value")
             v1, v2, v3 = st.columns(3)
-            v1.success("🛡️ **Public Safety**")
-            v2.success("💰 **Fiscal Savings**")
-            v3.success("📢 **Transparency**")
-    else: st.info("🔒 This section is accessible to the Admin only.")
+            with v1: st.success("🛡️ **Public Safety**\n\nReducing hazards.")
+            with v2: st.success("💰 **Fiscal Savings**\n\nLower maintenance.")
+            with v3: st.success("📢 **Transparency**\n\nDigitized records.")
+    else: st.info("🔒 Administrative access required to view performance metrics.")
