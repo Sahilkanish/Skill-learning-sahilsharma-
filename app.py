@@ -90,18 +90,27 @@ if not st.session_state.logged_in:
                         st.rerun()
                     else: st.error("Invalid Credentials")
             if st.button("Forgot Password?"): st.session_state.reset_mode = True; st.rerun()
-        with t2:
-            with st.form("s"):
-                ne, npw, ncp = st.text_input("Email"), st.text_input("Pass", type="password"), st.text_input("Confirm", type="password")
-                if st.form_submit_button("Sign Up"):
-                    if ne and npw == ncp:
-                        try:
-                            conn = sqlite3.connect(DB_NAME); conn.execute("INSERT INTO users (email, password) VALUES (?,?)", (ne, npw)); conn.commit(); conn.close()
-                            st.success("Account Created!"); st.rerun()
-                        except: st.error("Email Exists!")
-    st.stop()
-
-is_admin = (st.session_state.user_email == ADMIN_EMAIL)
+        # --- Replace your Sign Up block with this ---
+with t2:
+    with st.form("s"):
+        ne, npw, ncp = st.text_input("Email"), st.text_input("Pass", type="password"), st.text_input("Confirm", type="password")
+        if st.form_submit_button("Sign Up"):
+            if not ne or not npw:
+                st.error("Please fill all fields!")
+            elif npw != ncp:
+                st.error("Passwords do not match!")
+            else:
+                try:
+                    conn = sqlite3.connect(DB_NAME)
+                    conn.execute("INSERT INTO users (email, password) VALUES (?,?)", (ne, npw))
+                    conn.commit()
+                    conn.close()
+                    st.success("✅ Account Created! Please switch to Login tab.")
+                    # st.rerun()  # Optional: isko hata sakte ho taaki user success message dekh sake
+                except sqlite3.IntegrityError:
+                    st.error("❌ Email already exists! Try logging in.")
+                except Exception as e:
+                    st.error(f"Error: {e}")
 
 # --- 3. SIDEBAR ---
 with st.sidebar:
