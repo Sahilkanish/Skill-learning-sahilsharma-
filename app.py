@@ -15,9 +15,9 @@ from streamlit_geolocation import streamlit_geolocation
 # --- 1. CONFIGURATION ---
 st.set_page_config(page_title="AI Road Damage Detector", layout="wide")
 
-DB_NAME = 'road_reports_v4.db' 
-ADMIN_EMAIL = "ss6929043@gmail.com" 
-SENDER_EMAIL = "ss6929043@gmail.com" 
+DB_NAME = 'road_reports_v4.db'
+ADMIN_EMAIL = "ss6929043@gmail.com"
+SENDER_EMAIL = "ss6929043@gmail.com"
 SENDER_PASS = st.secrets.get("GMAIL_PASS", "") 
 
 if not os.path.exists("saved_results"):
@@ -58,12 +58,11 @@ def setup_db():
     conn.commit(); conn.close()
 
 setup_db()
-is_admin = False
-if st.session_state.get('logged_in') and st.session_state.get('user_email') == ADMIN_EMAIL:
-    is_admin = True
+
 # --- 2. LOGIN SYSTEM ---
 if not st.session_state.logged_in:
     st.markdown("<h2 style='text-align: center;'>🔐 AI Road Damage Detector</h2>", unsafe_allow_html=True)
+    
     if st.session_state.reset_mode:
         st.subheader("🔄 Reset Password")
         e_reset = st.text_input("Enter Email")
@@ -72,49 +71,50 @@ if not st.session_state.logged_in:
             if send_email("Reset OTP", f"Your OTP: {otp}", e_reset):
                 st.session_state.generated_otp, st.session_state.target_email = otp, e_reset
                 st.success("OTP Sent!")
+        
         u_otp = st.text_input("Enter OTP")
         new_pw = st.text_input("New Password", type="password")
         if st.button("Update"):
             if str(u_otp) == str(st.session_state.get('generated_otp')):
-                conn = sqlite3.connect(DB_NAME); conn.execute("UPDATE users SET password=? WHERE email=?", (new_pw, st.session_state.target_email)); conn.commit(); conn.close()
+                conn = sqlite3.connect(DB_NAME)
+                conn.execute("UPDATE users SET password=? WHERE email=?", (new_pw, st.session_state.target_email))
+                conn.commit(); conn.close()
                 st.success("Done!"); st.session_state.reset_mode = False; st.rerun()
         if st.button("Back"): st.session_state.reset_mode = False; st.rerun()
+    
     else:
         t1, t2 = st.tabs(["Login", "Sign Up"])
         with t1:
-            with st.form("l"):
+            with st.form("login_form"):
                 le, lp = st.text_input("Email"), st.text_input("Password", type="password")
                 if st.form_submit_button("Login"):
-                    conn = sqlite3.connect(DB_NAME); d = conn.execute("SELECT password FROM users WHERE email=?", (le,)).fetchone(); conn.close()
+                    conn = sqlite3.connect(DB_NAME)
+                    d = conn.execute("SELECT password FROM users WHERE email=?", (le,)).fetchone()
+                    conn.close()
                     if d and d[0] == lp:
                         st.session_state.logged_in, st.session_state.user_email = True, le
                         if le != ADMIN_EMAIL: send_email("Login Alert", f"User {le} logged in", ADMIN_EMAIL)
                         st.rerun()
-                    else: st.error("Invalid Credentials")
+                    else: st.error("❌ Invalid Credentials")
             if st.button("Forgot Password?"): st.session_state.reset_mode = True; st.rerun()
-        # --- Replace your Sign Up block with this ---
-with t2:
-    with st.form("s"):
-        ne, npw, ncp = st.text_input("Email"), st.text_input("Pass", type="password"), st.text_input("Confirm", type="password")
-        if st.form_submit_button("Sign Up"):
-            if not ne or not npw:
-                st.error("Please fill all fields!")
-            elif npw != ncp:
-                st.error("Passwords do not match!")
-            else:
-                try:
-                    conn = sqlite3.connect(DB_NAME)
-                    conn.execute("INSERT INTO users (email, password) VALUES (?,?)", (ne, npw))
-                    conn.commit()
-                    conn.close()
-                    st.success("✅ Account Created! Please switch to Login tab.")
-                    # st.rerun()  # Optional: isko hata sakte ho taaki user success message dekh sake
-                except sqlite3.IntegrityError:
-                    st.error("❌ Email already exists! Try logging in.")
-                except Exception as e:
-                    st.error(f"Error: {e}")
+        
+        with t2:
+            with st.form("signup_form"):
+                ne, npw, ncp = st.text_input("Email"), st.text_input("Pass", type="password"), st.text_input("Confirm", type="password")
+                if st.form_submit_button("Sign Up"):
+                    if ne and npw == ncp:
+                        try:
+                            conn = sqlite3.connect(DB_NAME)
+                            conn.execute("INSERT INTO users (email, password) VALUES (?,?)", (ne, npw))
+                            conn.commit(); conn.close()
+                            st.success("✅ Account Created! Now please Login.")
+                        except: st.error("❌ Email already exists!")
+                    else: st.error("❌ Passwords do not match or fields are empty.")
+    st.stop()
 
-# --- 3. SIDEBAR ---
+# --- 3. SIDEBAR (Only visible after login) ---
+is_admin = (st.session_state.user_email == ADMIN_EMAIL)
+
 with st.sidebar:
     if is_admin:
         st.markdown("<h3 style='color: #2ecc71; text-align: center;'>👑 Admin Mode</h3>", unsafe_allow_html=True)
@@ -124,7 +124,7 @@ with st.sidebar:
         st.info(f"📧 User: {st.session_state.user_email}")
     
     if st.button("🚪 Logout", use_container_width=True): 
-        for key in list(st.session_state.keys()): del st.session_state[key]
+        st.session_state.clear()
         st.rerun()
     
     if is_admin:
@@ -146,8 +146,6 @@ with st.sidebar:
     
     st.markdown("---")
     st.write("📍 **Step 2: Get Location**")
-    
-    # Live Geolocation Component
     loc = streamlit_geolocation()
     if st.button("Capture Live GPS", use_container_width=True):
         if loc and loc.get("latitude"):
@@ -158,13 +156,13 @@ with st.sidebar:
         else:
             st.sidebar.error("❌ GPS not detected. Allow browser location access.")
 
-    u_lat = st.number_input("Lat", value=st.session_state.auto_lat, format="%.6f", key="sidebar_lat")
-    u_lon = st.number_input("Lon", value=st.session_state.auto_lon, format="%.6f", key="sidebar_lon")
+    u_lat = st.number_input("Lat", value=st.session_state.auto_lat, format="%.6f")
+    u_lon = st.number_input("Lon", value=st.session_state.auto_lon, format="%.6f")
 
     st.markdown("---")
     st.write("📂 **Step 3: Historical Data**")
     st.caption("Click on the 'Historical Data' tab above.")
-    st.write("📈 **Step 4: Performance Matrix**")
+    st.write("📈 **Step 4: Performance Metrics**")
     st.caption("Click on the 'Performance Metrics' tab above.")
 
 # --- 4. MAIN DASHBOARD ---
@@ -178,15 +176,13 @@ tab_dash, tab_hist, tab_stats = st.tabs(["🖥️ Dashboard", "📂 Historical D
 with tab_dash:
     if not st.session_state.detection_data:
         if is_admin:
-            st.info("👋 **Hello Admin!**\n\n1. If you want to perform the detection yourself, follow Steps 1 and 2 in the sidebar.\n2. To check user reports, please refer to the Notification Bar in the sidebar.")
+            st.info("👋 **Hello Admin!**\n\nPerform detection or check the notifications in the sidebar.")
         else:
-            st.info("📷 **Welcome!**\n\nTo report road damage, follow Step 1 and Step 2 provided in the sidebar.")
+            st.info("📷 **Welcome!**\n\nTo report road damage, follow Step 1 and Step 2 in the sidebar.")
 
     if uploaded_file and st.button("🚀 Run AI Detection", type="primary", use_container_width=True):
         img = Image.open(uploaded_file)
         res = yolo_model.predict(img, conf=0.25)
-        st.session_state.last_speed = res[0].speed['inference']
-        
         res_img = res[0].plot()
         lbls = res[0].boxes.cls.tolist()
         p_cnt = sum(1 for lid in lbls if 'pothole' in yolo_model.names[int(lid)].lower())
@@ -209,19 +205,16 @@ with tab_dash:
 
     if st.session_state.detection_data:
         det = st.session_state.detection_data
-        
         c_l, c_r = st.columns([1.5, 1])
         with c_l: 
             st.markdown("### 🔍 Detection Result")
             st.image(det['image_path'], use_container_width=True)
         with c_r:
-            st.markdown("### 📋 Detection Index Heading")
+            st.markdown("### 📋 Detection Details")
             st.table(pd.DataFrame({"Param": ["User", "Lat", "Lon", "Potholes", "Cracks"], 
                                    "Value": [det.get('user_email'), det['lat'], det['lon'], det['potholes'], det['cracks']]}))
             
-            if not is_admin:
-                st.info("📩 **Your report has been sent to the Admin.**")
-
+            if not is_admin: st.info("📩 **Your report has been sent to the Admin.**")
             if det['potholes'] > 3: st.error("🔴 **ROAD IS DAMAGED**")
             elif det['potholes'] >= 1: st.warning("🟠 **ROAD REPAIR NEEDED**")
             else: st.success("🟢 **ROAD IS GOOD**")
@@ -238,8 +231,7 @@ with tab_dash:
                         conn.commit(); conn.close()
                         st.success("Report Approved!"); st.session_state.detection_data = None; st.session_state.active_review = False; st.rerun()
                     if b_col2.button("❌ Discard Report", use_container_width=True):
-                        conn = sqlite3.connect(DB_NAME)
-                        conn.execute("DELETE FROM pending_reports WHERE id=?", (st.session_state.active_index,))
+                        conn = sqlite3.connect(DB_NAME); conn.execute("DELETE FROM pending_reports WHERE id=?", (st.session_state.active_index,))
                         conn.commit(); conn.close()
                         st.warning("Report Discarded!"); st.session_state.detection_data = None; st.session_state.active_review = False; st.rerun()
                 else:
@@ -253,19 +245,54 @@ with tab_dash:
                         st.session_state.detection_data = None; st.rerun()
 
         st.markdown("---")
-        st.subheader("📊 Graph and Analysis with Graph Report Image")
+        st.subheader("📊 Damage Analysis")
         st.bar_chart(pd.DataFrame({"Count": [det['potholes'], det['cracks']]}, index=["Potholes", "Cracks"]))
         
         st.markdown("---")
         st.subheader("🗺️ Map View")
-        # Fix: Using det['lat'] and det['lon'] to show actual marker on map
         m = folium.Map(location=[det['lat'], det['lon']], zoom_start=16)
-        folium.Marker(
-            [det['lat'], det['lon']], 
-            popup=f"Damage detected by {det['user_email']}",
-            icon=folium.Icon(color='red' if det['potholes'] > 0 else 'green')
-        ).add_to(m)
+        folium.Marker([det['lat'], det['lon']], popup=f"Damage detected by {det['user_email']}",
+                      icon=folium.Icon(color='red' if det['potholes'] > 0 else 'green')).add_to(m)
         st_folium(m, width=1100, height=400, key="main_map")
+
+# --- TAB 2: HISTORICAL DATA ---
+with tab_hist:
+    if is_admin:
+        st.header("📂 Data Management & Records")
+        st.info("ℹ️ Select a category and click 'Show Records'.")
+        report_type = st.selectbox("Select Category", ["All Reports", "Crack", "Pothole", "User Logins"])
+        
+        if st.button("🔍 Show Records", use_container_width=True, type="primary"):
+            conn = sqlite3.connect(DB_NAME)
+            if report_type == "All Reports":
+                df = pd.read_sql_query("SELECT * FROM road_logs ORDER BY timestamp DESC", conn)
+            elif report_type == "Crack":
+                df = pd.read_sql_query("SELECT * FROM road_logs WHERE cracks > 0", conn)
+            elif report_type == "Pothole":
+                df = pd.read_sql_query("SELECT * FROM road_logs WHERE potholes > 0", conn)
+            elif report_type == "User Logins":
+                df = pd.read_sql_query("SELECT email FROM users", conn)
+            
+            st.dataframe(df, use_container_width=True)
+            if report_type != "User Logins":
+                for i, r in df.iterrows():
+                    with st.expander(f"View Image (ID: {r.get('id')})"):
+                        if os.path.exists(r['image_path']): st.image(r['image_path'])
+            conn.close()
+    else:
+        st.warning("### 🔐 Admin Access Only")
+
+# --- TAB 3: PERFORMANCE ---
+with tab_stats:
+    if is_admin:
+        st.header("📈 Model Performance Analysis")
+        if st.button("📊 View Performance Metrics", use_container_width=True, type="primary"):
+            st.metric("Training mAP50", "86.5%")
+            st.metric("Validation mAP50", "81.4%")
+            if os.path.exists('results.png'): st.image('results.png', caption='Accuracy & Loss Curves')
+            st.success("#### Model ready for production deployment.")
+    else:
+        st.warning("### 🔐 Admin Access Only")
 
 # --- TAB 2: HISTORICAL DATA ---
 # --- TAB 2: HISTORICAL DATA ---
