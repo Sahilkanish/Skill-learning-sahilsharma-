@@ -33,7 +33,7 @@ if 'auto_lon' not in st.session_state: st.session_state.auto_lon = 77.2090
 
 # --- FUNCTIONS ---
 def send_email(subject, body, to_email):
-    try:
+try:
         msg = EmailMessage()
         msg.set_content(body)
         msg['Subject'] = subject
