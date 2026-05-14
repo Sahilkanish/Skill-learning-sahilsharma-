@@ -152,9 +152,9 @@ with st.sidebar:
 
     st.markdown("---")
     st.write("📂 **Step 3: Historical Data**")
-    st.caption("Upar 'Historical Data' tab par click karein.")
+    st.caption("Click on the 'Historical Data' tab above.")
     st.write("📈 **Step 4: Performance Matrix**")
-    st.caption("Upar 'Performance Metrics' tab par click karein.")
+    st.caption("Click on the 'Performance Metrics' tab above.")
 
 # --- 4. MAIN DASHBOARD ---
 @st.cache_resource
